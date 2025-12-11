@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   TextInput,
   Text,
@@ -6,7 +6,11 @@ import {
   ScrollView,
   useColorScheme,
   View,
+  Platform,
 } from 'react-native';
+
+import RNFS from 'react-native-fs';
+import Sound from 'react-native-sound';
 
 import { MockBle } from './src/services/MockBle';
 import { BleService, BleDeviceInfo } from './src/services/BleService';
@@ -30,6 +34,64 @@ export default function App() {
   const [progress, setProgress] = useState(0);
 
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
+
+  const [sound, setSound] = useState<Sound | null>(null);
+  const [playing, setPlaying] = useState(false);
+
+  const prepareFile = async () => {
+    try {
+      let path = '';
+      if (Platform.OS === 'android') {
+        path = RNFS.DocumentDirectoryPath + '/basse.mp3';
+        // copie depuis assets Android
+        await RNFS.copyFileAssets('audio/basse.mp3', path);
+      } else {
+        path = RNFS.MainBundlePath + '/audio/basse.mp3';
+      }
+      console.log('MP3 accessible à :', path);
+      return path;
+    } catch (e) {
+      console.error('Erreur préparation fichier MP3 :', e);
+      return null;
+    }
+  };
+
+  const playSound = async () => {
+    if (playing) {
+      sound?.stop(() => setPlaying(false));
+      return;
+    }
+
+    const filePath = await prepareFile();
+    if (!filePath) return;
+
+    const s = new Sound(filePath, '', err => {
+      if (err) {
+        console.log('Erreur lecture MP3 :', err);
+        return;
+      }
+      s.play(success => {
+        if (success) {
+          console.log('Lecture terminée');
+        } else {
+          console.log('Erreur pendant la lecture');
+        }
+        setPlaying(false);
+        s.release();
+        setSound(null);
+      });
+      setPlaying(true);
+      setSound(s);
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      // Cleanup
+      sound?.stop();
+      sound?.release();
+    };
+  }, [sound]);
 
   const handleSendMock = async () => {
     setProgress(0);
@@ -114,6 +176,13 @@ export default function App() {
       <PrimaryButton
         title="Connexion BLE"
         onPress={handleRealBle}
+        color={colors.accent}
+        textColor={colors.buttonText}
+      />
+
+      <PrimaryButton
+        title={playing ? 'Stop' : 'Play MP3'}
+        onPress={playSound}
         color={colors.accent}
         textColor={colors.buttonText}
       />
