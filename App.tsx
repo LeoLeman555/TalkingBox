@@ -9,13 +9,12 @@ import {
 } from 'react-native';
 
 import { MockBle } from './src/services/MockBle';
-import { BleService } from './src/services/BleService';
+import { BleService, BleDeviceInfo } from './src/services/BleService';
 import { PrimaryButton } from './src/components/PrimaryButton';
 import { getColors } from './src/theme/colors';
 import { useBlePermissions } from './src/hooks/useBlePermissions';
 import { ProgressBar } from './src/components/ProgressBar';
-
-import { computeMeta, chunkFile } from './src/logic/FileChunker';
+import { DeviceInfo } from './src/components/DeviceInfo';
 
 const mock = new MockBle();
 const realBle = new BleService();
@@ -27,79 +26,46 @@ export default function App() {
   const colors = getColors(scheme);
 
   const [text, setText] = useState('');
-  const [state, setState] = useState('disconnected');
+  const [state, setState] = useState('NOT CONNECTED');
   const [progress, setProgress] = useState(0);
 
-  const handleGenerate = async () => {
-    setState('generating');
-    await new Promise(r => setTimeout(r, 500));
-    setState('ready');
-  };
+  const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
 
   const handleSendMock = async () => {
-    setState('connecting');
+    setProgress(0);
+    setState('CONNECTING...');
     await mock.scanAndConnect();
-    setState('connected');
-
-    setState('transferring');
-    const total = 20;
-    for (let i = 0; i < total; i++) {
-      setProgress(Math.round((i / total) * 100));
-      await mock.sendChunk(new Uint8Array([0]));
-    }
     setProgress(100);
-
-    await mock.endTransfer();
-    setState('playing');
-    await mock.play();
-    setState('done');
+    setState('CONNECTED');
   };
 
-  const handleRealBleTest = async () => {
-    setState('connecting');
+  const handleRealBle = async () => {
+    setProgress(0);
+    setState('CONNECTING...');
+    setDeviceInfo(null);
 
     try {
-      const ok = await realBle.scanAndConnect();
-      setState(ok ? 'connected' : 'disconnected');
+      const d = await realBle.scanAndConnect();
+      if (!d) {
+        setState('DISCONNECTED');
+        return;
+      }
+      setProgress(100);
+      setState('CONNECTED 👍');
+
+      try {
+        const info = await realBle.readDeviceInfo();
+        setDeviceInfo(info);
+      } catch (infoError) {
+        console.log('[BLE] readDeviceInfo error:', infoError);
+        setProgress(50);
+        setDeviceInfo(null);
+      }
     } catch (error) {
       console.log('[BLE] Connection error:', error);
-      setState('disconnected');
-    }
-  };
-
-  const handleSendRealMp3 = async () => {
-    try {
-      setState('connecting...');
-      await realBle.scanAndConnect();
-
-      setState('connected — preparing file');
-      const path = '/sdcard/Download/test.mp3';
-
-      const meta = await computeMeta(path, realBle.chunkSize);
-
-      await realBle.writeStart({
-        filename: meta.filename,
-        total_chunks: meta.totalChunks,
-        total_size: meta.size,
-        sha256: meta.sha256,
-      });
-
-      setState('sending chunks');
-      let i = 0;
-
-      for await (const c of chunkFile(path, realBle.chunkSize)) {
-        await realBle.writeChunk(c.seq, c.payload);
-        i++;
-        setProgress(Math.round((i / meta.totalChunks) * 100));
-      }
-
-      setState('end');
-      await realBle.writeStart({ cmd: 'END' });
-
-      setState('done');
-    } catch (e) {
-      console.log('Real MP3 send error:', e);
-      setState('error');
+      setProgress(0);
+      setState('DISCONNECTED');
+      setDeviceInfo(null);
     }
   };
 
@@ -113,6 +79,14 @@ export default function App() {
       </Text>
 
       <View style={styles.section}>
+        <Text
+          style={[
+            styles.info,
+            { color: colors.text, textAlign: 'center', marginTop: 6 },
+          ]}
+        >
+          {state}
+        </Text>
         <Text style={[styles.label, { color: colors.text }]}>Message</Text>
 
         <TextInput
@@ -131,14 +105,7 @@ export default function App() {
       </View>
 
       <PrimaryButton
-        title="Générer MP3 (mock)"
-        onPress={handleGenerate}
-        color={colors.mock}
-        textColor={colors.buttonText}
-      />
-
-      <PrimaryButton
-        title="Envoyer via BLE (mock)"
+        title="Connexion BLE - Mock"
         onPress={handleSendMock}
         color={colors.mock}
         textColor={colors.buttonText}
@@ -146,14 +113,7 @@ export default function App() {
 
       <PrimaryButton
         title="Connexion BLE"
-        onPress={handleRealBleTest}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
-
-      <PrimaryButton
-        title="Envoyer MP3"
-        onPress={handleSendRealMp3}
+        onPress={handleRealBle}
         color={colors.accent}
         textColor={colors.buttonText}
       />
@@ -174,8 +134,7 @@ export default function App() {
           {progress} %
         </Text>
       </View>
-
-      <Text style={[styles.info, { color: colors.text }]}>État : {state}</Text>
+      {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
     </ScrollView>
   );
 }
