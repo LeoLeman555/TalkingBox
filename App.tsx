@@ -3,13 +3,12 @@ import {
   TextInput,
   Text,
   StyleSheet,
-  ScrollView,
   useColorScheme,
   View,
   Platform,
+  Pressable,
+  FlatList,
 } from 'react-native';
-
-import RNFS from 'react-native-fs';
 import Sound from 'react-native-sound';
 
 import { MockBle } from './src/services/MockBle';
@@ -19,6 +18,9 @@ import { getColors } from './src/theme/colors';
 import { useBlePermissions } from './src/hooks/useBlePermissions';
 import { ProgressBar } from './src/components/ProgressBar';
 import { DeviceInfo } from './src/components/DeviceInfo';
+import { AUDIO_FILES, prepareAudioPath, AudioFile } from './src/AudioFiles';
+
+Sound.setCategory('Playback');
 
 const mock = new MockBle();
 const realBle = new BleService();
@@ -35,63 +37,75 @@ export default function App() {
 
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
 
-  const [sound, setSound] = useState<Sound | null>(null);
-  const [playing, setPlaying] = useState(false);
-
-  const prepareFile = async () => {
-    try {
-      let path = '';
-      if (Platform.OS === 'android') {
-        path = RNFS.DocumentDirectoryPath + '/basse.mp3';
-        // copie depuis assets Android
-        await RNFS.copyFileAssets('audio/basse.mp3', path);
-      } else {
-        path = RNFS.MainBundlePath + '/audio/basse.mp3';
-      }
-      console.log('MP3 accessible à :', path);
-      return path;
-    } catch (e) {
-      console.error('Erreur préparation fichier MP3 :', e);
-      return null;
-    }
-  };
-
-  const playSound = async () => {
-    if (playing) {
-      sound?.stop(() => setPlaying(false));
-      return;
-    }
-
-    const filePath = await prepareFile();
-    if (!filePath) return;
-
-    const s = new Sound(filePath, '', err => {
-      if (err) {
-        console.log('Erreur lecture MP3 :', err);
-        return;
-      }
-      s.play(success => {
-        if (success) {
-          console.log('Lecture terminée');
-        } else {
-          console.log('Erreur pendant la lecture');
-        }
-        setPlaying(false);
-        s.release();
-        setSound(null);
-      });
-      setPlaying(true);
-      setSound(s);
-    });
-  };
+  const [selected, setSelected] = useState<AudioFile | null>(null);
+  const [playing, setPlaying] = useState<boolean>(false);
+  const [player, setPlayer] = useState<Sound | null>(null);
 
   useEffect(() => {
     return () => {
-      // Cleanup
-      sound?.stop();
-      sound?.release();
+      player?.stop();
+      player?.release();
     };
-  }, [sound]);
+  }, [player]);
+
+  const onSelectFile = (file: AudioFile) => {
+    setSelected(file);
+  };
+
+  const playSelected = async () => {
+    if (!selected) return;
+
+    try {
+      const path = await prepareAudioPath(selected.filename);
+
+      // stop and release old player if exists
+      if (player) {
+        player.stop(() => player.release());
+        setPlayer(null);
+        setPlaying(false);
+      }
+
+      const snd = new Sound(
+        path,
+        Platform.OS === 'android' ? '' : Sound.MAIN_BUNDLE,
+        err => {
+          if (err) {
+            console.log('Load error:', err);
+            return;
+          }
+          snd.play(success => {
+            if (!success) {
+              console.log('Playback failed');
+            }
+            snd.release();
+            setPlaying(false);
+            setPlayer(null);
+          });
+          setPlaying(true);
+        },
+      );
+
+      setPlayer(snd);
+    } catch (e) {
+      console.log('Error playing file:', e);
+    }
+  };
+
+  const renderItem = ({ item }: { item: AudioFile }) => {
+    const isActive = selected?.id === item.id;
+    return (
+      <Pressable
+        onPress={() => onSelectFile(item)}
+        style={[styles.item, isActive ? styles.itemActive : null]}
+      >
+        <Text
+          style={[styles.itemText, isActive ? styles.itemTextActive : null]}
+        >
+          {item.label}
+        </Text>
+      </Pressable>
+    );
+  };
 
   const handleSendMock = async () => {
     setProgress(0);
@@ -132,79 +146,107 @@ export default function App() {
   };
 
   return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
+    <FlatList
+      data={AUDIO_FILES}
+      keyExtractor={i => i.id}
+      renderItem={renderItem}
+      // header contient tout ce qui était avant la liste
+      ListHeaderComponent={
+        <>
+          <View style={{ padding: 20, backgroundColor: colors.background }}>
+            <Text style={[styles.title, { color: colors.text }]}>
+              Talking Box — Prototype
+            </Text>
+
+            <View style={styles.section}>
+              <Text
+                style={[
+                  styles.info,
+                  { color: colors.text, textAlign: 'center', marginTop: 6 },
+                ]}
+              >
+                {state}
+              </Text>
+
+              <Text style={[styles.label, { color: colors.text }]}>
+                Message
+              </Text>
+
+              <TextInput
+                value={text}
+                onChangeText={setText}
+                placeholder="Saisir un message"
+                placeholderTextColor={scheme === 'dark' ? '#AAA' : '#666'}
+                style={[
+                  styles.input,
+                  {
+                    borderColor: colors.inputBorder,
+                    color: colors.text,
+                  },
+                ]}
+              />
+            </View>
+
+            <PrimaryButton
+              title="Connexion BLE - Mock"
+              onPress={handleSendMock}
+              color={colors.mock}
+              textColor={colors.buttonText}
+            />
+
+            <PrimaryButton
+              title="Connexion BLE"
+              onPress={handleRealBle}
+              color={colors.accent}
+              textColor={colors.buttonText}
+            />
+            <View style={{ marginTop: 20 }}>
+              <ProgressBar
+                progress={progress}
+                height={14}
+                backgroundColor={colors.inputBorder}
+                fillColor={colors.accent}
+              />
+              <Text
+                style={[
+                  styles.info,
+                  { color: colors.text, textAlign: 'center', marginTop: 6 },
+                ]}
+              >
+                {progress} %
+              </Text>
+            </View>
+
+            {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
+
+            <View style={{ marginTop: 12 }}>
+              <Text style={[styles.title, { color: colors.text }]}>
+                Select an audio file
+              </Text>
+              {/* la FlatList affichera les items juste après le header */}
+            </View>
+          </View>
+        </>
+      }
+      // footer contient ce qui était après la liste
+      ListFooterComponent={
+        <>
+          <View style={{ padding: 20, backgroundColor: colors.background }}>
+            <PrimaryButton
+              title={playing ? 'Stop' : 'Play MP3'}
+              onPress={playSelected}
+              color={colors.accent}
+              textColor={colors.buttonText}
+            />
+          </View>
+        </>
+      }
+      // styles
       contentContainerStyle={styles.content}
-    >
-      <Text style={[styles.title, { color: colors.text }]}>
-        Talking Box — Prototype
-      </Text>
-
-      <View style={styles.section}>
-        <Text
-          style={[
-            styles.info,
-            { color: colors.text, textAlign: 'center', marginTop: 6 },
-          ]}
-        >
-          {state}
-        </Text>
-        <Text style={[styles.label, { color: colors.text }]}>Message</Text>
-
-        <TextInput
-          value={text}
-          onChangeText={setText}
-          placeholder="Saisir un message"
-          placeholderTextColor={scheme === 'dark' ? '#AAA' : '#666'}
-          style={[
-            styles.input,
-            {
-              borderColor: colors.inputBorder,
-              color: colors.text,
-            },
-          ]}
-        />
-      </View>
-
-      <PrimaryButton
-        title="Connexion BLE - Mock"
-        onPress={handleSendMock}
-        color={colors.mock}
-        textColor={colors.buttonText}
-      />
-
-      <PrimaryButton
-        title="Connexion BLE"
-        onPress={handleRealBle}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
-
-      <PrimaryButton
-        title={playing ? 'Stop' : 'Play MP3'}
-        onPress={playSound}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
-
-      <View style={{ marginTop: 20 }}>
-        <ProgressBar
-          progress={progress}
-          height={14}
-          backgroundColor={colors.inputBorder}
-          fillColor={colors.accent}
-        />
-        <Text
-          style={[
-            styles.info,
-            { color: colors.text, textAlign: 'center', marginTop: 6 },
-          ]}
-        >
-          {progress} %
-        </Text>
-      </View>
-      {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
-    </ScrollView>
+      style={{ backgroundColor: colors.background }}
+      // optionnel : limite la hauteur de la liste si tu veux
+      // ListHeaderComponentStyle / ListFooterComponentStyle si besoin de marges
+    />
   );
 }
 
@@ -216,6 +258,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 20,
   },
+  list: {
+    maxHeight: 240,
+    borderWidth: 1,
+    borderColor: '#DDD',
+    borderRadius: 6,
+  },
+  listContent: { paddingVertical: 6 },
   section: { marginBottom: 20 },
   label: {
     fontSize: 16,
@@ -233,4 +282,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '500',
   },
+  item: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEE',
+    backgroundColor: '#FFF',
+  },
+  itemActive: { backgroundColor: '#0A84FF' },
+  itemText: { fontSize: 16, color: '#111' },
+  itemTextActive: { color: '#FFF' },
+  controls: { marginTop: 16 },
 });
