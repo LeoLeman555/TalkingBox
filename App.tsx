@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import Sound from 'react-native-sound';
 
-import { MockBle } from './src/services/MockBle';
+// import { MockBle } from './src/services/MockBle';
 import { BleService, BleDeviceInfo } from './src/services/BleService';
 import { PrimaryButton } from './src/components/PrimaryButton';
 import { getColors } from './src/theme/colors';
@@ -19,11 +19,16 @@ import { useBlePermissions } from './src/hooks/useBlePermissions';
 import { ProgressBar } from './src/components/ProgressBar';
 import { DeviceInfo } from './src/components/DeviceInfo';
 import { AUDIO_FILES, prepareAudioPath, AudioFile } from './src/AudioFiles';
+import { computeMeta, chunkFile } from './src/logic/FileChunker';
 
 Sound.setCategory('Playback');
 
-const mock = new MockBle();
+// const mock = new MockBle();
 const realBle = new BleService();
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(() => resolve(), ms));
+}
 
 export default function App() {
   useBlePermissions();
@@ -107,13 +112,13 @@ export default function App() {
     );
   };
 
-  const handleSendMock = async () => {
-    setProgress(0);
-    setState('CONNECTING...');
-    await mock.scanAndConnect();
-    setProgress(100);
-    setState('CONNECTED');
-  };
+  // const handleSendMock = async () => {
+  //   setProgress(0);
+  //   setState('CONNECTING...');
+  //   await mock.scanAndConnect();
+  //   setProgress(100);
+  //   setState('CONNECTED');
+  // };
 
   const handleRealBle = async () => {
     setProgress(0);
@@ -145,6 +150,136 @@ export default function App() {
     }
   };
 
+  const handleSendBleFile = async () => {
+    if (!selected) return console.log('[BLE FILE] No file selected');
+
+    let sub: any = null;
+    let mounted = true;
+    let doneOrFailed = false;
+
+    try {
+      console.log('[BLE FILE] Preparing file...');
+      setProgress(0);
+      setState('PREP FILE');
+
+      const path = await prepareAudioPath(selected.filename);
+      const meta = await computeMeta(path, realBle.chunkSize);
+      console.log('[BLE FILE] File meta:', meta);
+
+      if (!realBle.isConnected()) {
+        console.log('[BLE FILE] Not connected, scanning...');
+        setState('CONNECTING...');
+        await realBle.scanAndConnect();
+        console.log('[BLE FILE] Connected');
+        setState('CONNECTED');
+      }
+
+      let startAck = false;
+      let done = false;
+      let failed = false;
+
+      sub = await realBle.subscribeStatus(msg => {
+        if (!mounted || doneOrFailed) return;
+        console.log('[STATUS MSG]', msg);
+
+        switch (msg.event) {
+          case 'start_ack':
+            console.log('[STATUS] START ACK received');
+            startAck = true;
+            break;
+
+          case 'chunk_ack': {
+            const p = Math.floor((msg.received_count / meta.totalChunks) * 100);
+            console.log(`[STATUS] Chunk ack: seq=${msg.seq}, progress=${p}%`);
+            setProgress(p);
+            break;
+          }
+
+          case 'stored':
+            console.log('[STATUS] File stored by ESP, SHA:', msg.sha256);
+            done = true;
+            doneOrFailed = true;
+            setProgress(100);
+            setState('DONE');
+            try {
+              sub?.remove();
+              sub = null;
+            } catch {}
+            break;
+
+          case 'timeout':
+          case 'hash_mismatch':
+          case 'start_error':
+          case 'chunk_error':
+          case 'assemble_error':
+            console.error('[STATUS] ESP error:', msg);
+            failed = true;
+            doneOrFailed = true;
+            setState('ERROR');
+            try {
+              sub?.remove();
+              sub = null;
+            } catch {}
+            break;
+
+          default:
+            console.log('[STATUS] Unknown event:', msg);
+        }
+      });
+
+      console.log('[BLE FILE] Sending START');
+      setState('SEND START');
+      await realBle.writeStartBinary(meta.size, meta.sha256, meta.totalChunks);
+
+      // Wait START ACK
+      const t0 = Date.now();
+      setState('WAIT ACK');
+      while (!startAck) {
+        if (failed) throw new Error('ESP rejected START');
+        if (Date.now() - t0 > 3000) throw new Error('START ACK timeout');
+        await delay(30);
+      }
+
+      console.log('[BLE FILE] Sending chunks...');
+      setState('SEND CHUNKS');
+      let i = 0;
+      for await (const { seq, payload } of chunkFile(path, realBle.chunkSize)) {
+        if (failed) throw new Error('Transfer aborted by ESP');
+        console.log(
+          `[BLE FILE] Sending chunk seq=${seq}, len=${payload.length}`,
+        );
+        await realBle.writeChunk(seq, payload);
+        if (++i % 8 === 0) await delay(10);
+      }
+
+      console.log('[BLE FILE] Sending END...');
+      await delay(200);
+      setState('SEND END');
+      await realBle.sendEnd();
+
+      // Wait final confirmation
+      console.log('[BLE FILE] Waiting final confirmation from ESP...');
+      setState('WAIT ESP32');
+      const t1 = Date.now();
+      while (!done) {
+        if (failed) throw new Error('ESP failed storing file');
+        if (Date.now() - t1 > 10000) throw new Error('ESP store timeout');
+        await delay(50);
+      }
+
+      console.log('[BLE FILE] Transfer completed successfully');
+    } catch (e) {
+      console.error('[BLE FILE] ERROR sending mp3:', e);
+      if (mounted && !doneOrFailed) setState('ERROR');
+    } finally {
+      mounted = false;
+      try {
+        sub?.remove();
+        sub = null;
+      } catch {}
+    }
+  };
+
   return (
     <FlatList
       data={AUDIO_FILES}
@@ -158,16 +293,8 @@ export default function App() {
               Talking Box — Prototype
             </Text>
 
+            {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
             <View style={styles.section}>
-              <Text
-                style={[
-                  styles.info,
-                  { color: colors.text, textAlign: 'center', marginTop: 6 },
-                ]}
-              >
-                {state}
-              </Text>
-
               <Text style={[styles.label, { color: colors.text }]}>
                 Message
               </Text>
@@ -187,12 +314,12 @@ export default function App() {
               />
             </View>
 
-            <PrimaryButton
+            {/* <PrimaryButton
               title="Connexion BLE - Mock"
               onPress={handleSendMock}
               color={colors.mock}
               textColor={colors.buttonText}
-            />
+            /> */}
 
             <PrimaryButton
               title="Connexion BLE"
@@ -200,6 +327,14 @@ export default function App() {
               color={colors.accent}
               textColor={colors.buttonText}
             />
+            <Text
+              style={[
+                styles.info,
+                { color: colors.text, textAlign: 'center', marginTop: 6 },
+              ]}
+            >
+              {state}
+            </Text>
             <View style={{ marginTop: 20 }}>
               <ProgressBar
                 progress={progress}
@@ -217,8 +352,6 @@ export default function App() {
               </Text>
             </View>
 
-            {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
-
             <View style={{ marginTop: 12 }}>
               <Text style={[styles.title, { color: colors.text }]}>
                 Select an audio file
@@ -235,6 +368,12 @@ export default function App() {
             <PrimaryButton
               title={playing ? 'Stop' : 'Play MP3'}
               onPress={playSelected}
+              color={colors.accent}
+              textColor={colors.buttonText}
+            />
+            <PrimaryButton
+              title="Send MP3 via BLE"
+              onPress={handleSendBleFile}
               color={colors.accent}
               textColor={colors.buttonText}
             />

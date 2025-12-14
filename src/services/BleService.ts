@@ -18,7 +18,7 @@ export class BleService {
   private manager = new BleManager();
   private connected: Device | null = null;
 
-  public chunkSize = 180;
+  public chunkSize = 16; // default, recalculated on connect
 
   public isConnected(): boolean {
     return this.connected !== null;
@@ -48,7 +48,7 @@ export class BleService {
         if (
           device.name.includes('ESP32') ||
           device.name.includes('BOX') ||
-          device.localName === 'TALKING BOX - ESP32'
+          device.localName === 'TALKING BOX'
         ) {
           this.manager.stopDeviceScan();
           clearTimeout(timer);
@@ -64,11 +64,20 @@ export class BleService {
             try {
               const mtuValue = Number(await d.requestMTU(512));
               if (!isNaN(mtuValue)) {
-                this.chunkSize = Math.max(180, mtuValue - 64);
-                console.log('[BLE] MTU:', mtuValue);
+                // Reserve 20 bytes for BLE header, max payload = MTU - 20
+                this.chunkSize = Math.min(180, mtuValue - 20);
+                console.log(
+                  '[BLE] MTU:',
+                  mtuValue,
+                  'chunkSize:',
+                  this.chunkSize,
+                );
               }
             } catch {
-              console.log('[BLE] MTU negotiation failed');
+              console.log(
+                '[BLE] MTU negotiation failed, using default chunkSize',
+                this.chunkSize,
+              );
             }
 
             resolve(d);
@@ -81,36 +90,78 @@ export class BleService {
     });
   }
 
-  async writeStart(json: any) {
+  /** Send binary START frame with metadata. */
+  async writeStartBinary(
+    totalSize: number,
+    sha256: string,
+    totalChunks?: number,
+  ) {
     if (!this.connected) throw new Error('Not connected');
 
-    const payload = Buffer.from(JSON.stringify(json)).toString('base64');
+    // Calculate chunkSize if not passed
+    if (!totalChunks) {
+      totalChunks = Math.ceil(totalSize / this.chunkSize);
+    } else {
+      this.chunkSize = Math.ceil(totalSize / totalChunks);
+    }
+
+    const shaShortHex = sha256.substring(0, 16);
+    const shaBytes = Buffer.from(shaShortHex, 'hex');
+
+    const buf = Buffer.alloc(17);
+    buf.writeUInt8(0x01, 0); // START flag
+    buf.writeUInt16BE(totalChunks, 1); // total chunks
+    buf.writeUInt32BE(totalSize, 3); // total size
+    buf.writeUInt16BE(this.chunkSize, 7); // chunk size
+    shaBytes.copy(buf, 9); // SHA short
+
     await this.connected.writeCharacteristicWithResponseForService(
       SERVICE_UUID,
       CHAR_START,
-      payload,
+      buf.toString('base64'),
     );
 
-    console.log('[BLE] START sent');
+    console.log('[BLE] START sent', {
+      totalChunks,
+      totalSize,
+      chunkSize: this.chunkSize,
+      shaShortHex,
+    });
   }
 
+  /** Send END frame. */
+  async sendEnd() {
+    if (!this.connected) throw new Error('Not connected');
+
+    const buf = Buffer.from([0x02]);
+
+    await this.connected.writeCharacteristicWithResponseForService(
+      SERVICE_UUID,
+      CHAR_START,
+      buf.toString('base64'),
+    );
+
+    console.log('[BLE] END sent (binary)');
+  }
+
+  /** Send single chunk with sequence number. */
   async writeChunk(seq: number, payload: Uint8Array) {
     if (!this.connected) throw new Error('Not connected');
 
-    const header = Buffer.alloc(4);
-    header.writeUInt32BE(seq, 0);
-
-    const full = Buffer.concat([header, Buffer.from(payload)]);
+    const buf = Buffer.alloc(4 + payload.length);
+    buf.writeUInt32BE(seq, 0); // first 4 bytes = sequence
+    Buffer.from(payload).copy(buf, 4);
 
     await this.connected.writeCharacteristicWithResponseForService(
       SERVICE_UUID,
       CHAR_CHUNK,
-      full.toString('base64'),
+      buf.toString('base64'),
     );
 
-    console.log('[BLE] Chunk', seq);
+    console.log('[BLE] Chunk', seq, 'len', payload.length);
   }
 
+  /** Subscribe to STATUS notifications. */
   async subscribeStatus(cb: (obj: any) => void) {
     if (!this.connected) throw new Error('Not connected');
 
@@ -125,11 +176,14 @@ export class BleService {
         try {
           const json = Buffer.from(char.value, 'base64').toString('utf8');
           cb(JSON.parse(json));
-        } catch {}
+        } catch (e) {
+          console.log('[BLE] STATUS parse error', e);
+        }
       },
     );
   }
 
+  /** Read firmware version from STATUS characteristic. */
   async getFirmwareVersion(): Promise<string | null> {
     if (!this.connected) return null;
 
@@ -138,25 +192,23 @@ export class BleService {
         SERVICE_UUID,
         CHAR_STATUS,
       );
-
       if (!c?.value) return null;
 
       const decoded = Buffer.from(c.value, 'base64').toString('utf8');
       const obj = JSON.parse(decoded);
-
       return typeof obj.firmware === 'string' ? obj.firmware : null;
     } catch {
       return null;
     }
   }
 
+  /** Read device info including RSSI and firmware. */
   async readDeviceInfo(): Promise<BleDeviceInfo> {
     if (!this.connected) throw new Error('Not connected');
 
     const d = this.connected;
     console.log('[BLE] Read device info');
 
-    // RSSI
     let rssi: number | null = null;
     try {
       const updated = await d.readRSSI();
@@ -171,7 +223,7 @@ export class BleService {
     return {
       name: d.name ?? null,
       id: d.id,
-      mtu: this.chunkSize + 64,
+      mtu: this.chunkSize + 20,
       rssi,
       firmwareVersion: firmware,
     };

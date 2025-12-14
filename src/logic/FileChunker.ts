@@ -20,14 +20,15 @@ export async function computeMeta(path: string, payloadSize: number) {
   };
 }
 
-export async function* chunkFile(path: string, payloadSize: number) {
-  const b64 = await RNFS.readFile(path, 'base64');
-  const buf = Buffer.from(b64, 'base64');
-  let seq = 0;
+export async function* chunkFile(filePath: string, chunkSize: number) {
+  const base64 = await RNFS.readFile(filePath, 'base64');
+  const buffer = Buffer.from(base64, 'base64');
 
-  for (let offset = 0; offset < buf.length; offset += payloadSize) {
-    const slice = buf.slice(offset, offset + payloadSize);
-    yield { seq, payload: slice };
+  let seq = 0;
+  for (let offset = 0; offset < buffer.length; offset += chunkSize) {
+    const end = Math.min(offset + chunkSize, buffer.length);
+    const payload = buffer.slice(offset, end);
+    yield { seq, payload };
     seq++;
   }
 }
