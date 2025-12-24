@@ -20,6 +20,7 @@ import { ProgressBar } from './src/components/ProgressBar';
 import { DeviceInfo } from './src/components/DeviceInfo';
 import { AUDIO_FILES, prepareAudioPath, AudioFile } from './src/AudioFiles';
 import { computeMeta, chunkFile } from './src/logic/FileChunker';
+import { TtsService } from './src/services/TtsService';
 
 Sound.setCategory('Playback');
 
@@ -55,6 +56,19 @@ export default function App() {
 
   const onSelectFile = (file: AudioFile) => {
     setSelected(file);
+  };
+
+  const handleGeneratePlayExport = async () => {
+    try {
+      const tts = await TtsService.generate(text, 'tts_test.wav');
+      console.log('Fichier interne créé :', tts.path);
+      await TtsService.play(tts.path);
+      console.log('Fichier joué');
+      const uri = await TtsService.exportToMusic(tts.path, 'tts_test.wav');
+      console.log('Fichier exporté dans Music/TalkingBox/Prototype_1 :', uri);
+    } catch (e) {
+      console.error('Erreur TTS :', e);
+    }
   };
 
   const playSelected = async () => {
@@ -320,6 +334,29 @@ export default function App() {
               color={colors.mock}
               textColor={colors.buttonText}
             /> */}
+
+            <PrimaryButton
+              title="Générer MP3 TTS"
+              onPress={async () => {
+                if (!text || text.trim() === '') return;
+                try {
+                  const filename = `tts_${Date.now()}.wav`;
+                  const result = await TtsService.generate(text, filename);
+                  console.log('TTS généré:', result.path);
+                } catch (e) {
+                  console.error('Erreur TTS:', e);
+                }
+              }}
+              color={colors.accent}
+              textColor={colors.buttonText}
+            />
+
+            <PrimaryButton
+              title="Générer et lire TTS"
+              onPress={handleGeneratePlayExport}
+              color={colors.accent}
+              textColor={colors.buttonText}
+            />
 
             <PrimaryButton
               title="Connexion BLE"
