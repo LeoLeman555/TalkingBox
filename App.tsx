@@ -1,16 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   TextInput,
   Text,
   StyleSheet,
   useColorScheme,
   View,
-  Platform,
-  Pressable,
-  FlatList,
 } from 'react-native';
-import Sound from 'react-native-sound';
-
 // import { MockBle } from './src/services/MockBle';
 import { BleService, BleDeviceInfo } from './src/services/BleService';
 import { PrimaryButton } from './src/components/PrimaryButton';
@@ -18,11 +13,8 @@ import { getColors } from './src/theme/colors';
 import { useBlePermissions } from './src/hooks/useBlePermissions';
 import { ProgressBar } from './src/components/ProgressBar';
 import { DeviceInfo } from './src/components/DeviceInfo';
-import { AUDIO_FILES, prepareAudioPath, AudioFile } from './src/AudioFiles';
 import { computeMeta, chunkFile } from './src/logic/FileChunker';
 import { TtsService } from './src/services/TtsService';
-
-Sound.setCategory('Playback');
 
 // const mock = new MockBle();
 const realBle = new BleService();
@@ -57,97 +49,38 @@ export default function App() {
   const [text, setText] = useState('');
   const [state, setState] = useState('NOT CONNECTED');
   const [progress, setProgress] = useState(0);
-
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
+  const [selected, setSelected] = useState<{ filename: string } | null>(null);
 
-  const [selected, setSelected] = useState<AudioFile | null>(null);
-  const [playing, setPlaying] = useState<boolean>(false);
-  const [player, setPlayer] = useState<Sound | null>(null);
+  const handleGenerateTTS = async () => {
+    if (!text.trim()) return;
 
-  useEffect(() => {
-    return () => {
-      player?.stop();
-      player?.release();
-    };
-  }, [player]);
-
-  const onSelectFile = (file: AudioFile) => {
-    setSelected(file);
-  };
-
-  const handleGeneratePlayExport = async () => {
     try {
       const filename = generateTtsFilename();
       console.log('[TTS][APP][START][filename=' + filename + ']');
 
       const tts = await TtsService.generate(text, filename);
       console.log('[TTS][APP][GENERATED][path=' + tts.path + ']');
-
-      await TtsService.play(tts.path);
-      console.log('[TTS][APP][PLAYED]');
+      setSelected({ filename: tts.path });
 
       const uri = await TtsService.exportToMusic(tts.path, filename);
-      console.log(
-        '[TTS][APP][EXPORTED][Music/TalkingBox/Prototype_1][uri=' + uri + ']',
-      );
+      console.log('[TTS][APP][EXPORTED][uri=' + uri + ']');
     } catch (e) {
       console.error('[TTS][APP][ERROR]', e);
     }
   };
 
-  const playSelected = async () => {
-    if (!selected) return;
-
-    try {
-      const path = await prepareAudioPath(selected.filename);
-
-      // stop and release old player if exists
-      if (player) {
-        player.stop(() => player.release());
-        setPlayer(null);
-        setPlaying(false);
-      }
-
-      const snd = new Sound(
-        path,
-        Platform.OS === 'android' ? '' : Sound.MAIN_BUNDLE,
-        err => {
-          if (err) {
-            console.log('Load error:', err);
-            return;
-          }
-          snd.play(success => {
-            if (!success) {
-              console.log('Playback failed');
-            }
-            snd.release();
-            setPlaying(false);
-            setPlayer(null);
-          });
-          setPlaying(true);
-        },
-      );
-
-      setPlayer(snd);
-    } catch (e) {
-      console.log('Error playing file:', e);
+  const playTts = async (): Promise<void> => {
+    if (!selected) {
+      console.error('[TTS][APP] No file selected');
+      return;
     }
-  };
-
-  const renderItem = ({ item }: { item: AudioFile }) => {
-    const isActive = selected?.id === item.id;
-    return (
-      <Pressable
-        onPress={() => onSelectFile(item)}
-        style={[styles.item, isActive ? styles.itemActive : null]}
-      >
-        <Text
-          style={[styles.itemText, isActive ? styles.itemTextActive : null]}
-        >
-          {item.label}
-        </Text>
-      </Pressable>
-    );
+    try {
+      console.log('[TTS][APP][PLAY][path=' + selected.filename + ']');
+      await TtsService.play(selected.filename);
+    } catch (e) {
+      console.error('[TTS][APP][PLAY_ERROR]', e);
+    }
   };
 
   // const handleSendMock = async () => {
@@ -189,8 +122,10 @@ export default function App() {
   };
 
   const handleSendBleFile = async () => {
-    if (!selected) return console.log('[BLE FILE] No file selected');
-
+    if (!selected) {
+      console.error('[BLE FILE] No file selected');
+      return;
+    }
     let sub: any = null;
     let mounted = true;
     let doneOrFailed = false;
@@ -200,7 +135,7 @@ export default function App() {
       setProgress(0);
       setState('PREP FILE');
 
-      const path = await prepareAudioPath(selected.filename);
+      const path = selected.filename;
       const meta = await computeMeta(path, realBle.chunkSize);
       console.log('[BLE FILE] File meta:', meta);
 
@@ -319,141 +254,87 @@ export default function App() {
   };
 
   return (
-    <FlatList
-      data={AUDIO_FILES}
-      keyExtractor={i => i.id}
-      renderItem={renderItem}
-      // header contient tout ce qui était avant la liste
-      ListHeaderComponent={
-        <>
-          <View style={{ padding: 20, backgroundColor: colors.background }}>
-            <Text style={[styles.title, { color: colors.text }]}>
-              Talking Box — Prototype
-            </Text>
+    <View style={{ padding: 20, backgroundColor: colors.background }}>
+      <Text style={[styles.title, { color: colors.text }]}>
+        Talking Box — Prototype
+      </Text>
+      <View style={styles.section}>
+        <Text style={[styles.label, { color: colors.text }]}>Message</Text>
 
-            {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
-            <View style={styles.section}>
-              <Text style={[styles.label, { color: colors.text }]}>
-                Message
-              </Text>
+        <TextInput
+          value={text}
+          onChangeText={setText}
+          placeholder="Saisir un message"
+          placeholderTextColor={scheme === 'dark' ? '#AAA' : '#666'}
+          style={[
+            styles.input,
+            {
+              borderColor: colors.inputBorder,
+              color: colors.text,
+            },
+          ]}
+        />
+      </View>
 
-              <TextInput
-                value={text}
-                onChangeText={setText}
-                placeholder="Saisir un message"
-                placeholderTextColor={scheme === 'dark' ? '#AAA' : '#666'}
-                style={[
-                  styles.input,
-                  {
-                    borderColor: colors.inputBorder,
-                    color: colors.text,
-                  },
-                ]}
-              />
-            </View>
-
-            {/* <PrimaryButton
+      {/* <PrimaryButton
               title="Connexion BLE - Mock"
               onPress={handleSendMock}
               color={colors.mock}
               textColor={colors.buttonText}
             /> */}
 
-            <PrimaryButton
-              title="Générer TTS"
-              onPress={async () => {
-                if (!text || text.trim() === '') return;
+      <PrimaryButton
+        title="Générer TTS"
+        onPress={handleGenerateTTS}
+        color={colors.accent}
+        textColor={colors.buttonText}
+      />
 
-                try {
-                  const filename = generateTtsFilename();
-                  console.log(
-                    '[TTS][APP][GENERATE_ONLY][filename=' + filename + ']',
-                  );
+      <PrimaryButton
+        title="Lire TTS"
+        onPress={playTts}
+        color={colors.accent}
+        textColor={colors.buttonText}
+      />
 
-                  const result = await TtsService.generate(text, filename);
-                  console.log(
-                    '[TTS][APP][GENERATED][path=' + result.path + ']',
-                  );
-                } catch (e) {
-                  console.error('[TTS][APP][ERROR]', e);
-                }
-              }}
-              color={colors.accent}
-              textColor={colors.buttonText}
-            />
-
-            <PrimaryButton
-              title="Exporter TTS"
-              onPress={handleGeneratePlayExport}
-              color={colors.accent}
-              textColor={colors.buttonText}
-            />
-
-            <PrimaryButton
-              title="Connexion BLE"
-              onPress={handleRealBle}
-              color={colors.accent}
-              textColor={colors.buttonText}
-            />
-            <Text
-              style={[
-                styles.info,
-                { color: colors.text, textAlign: 'center', marginTop: 6 },
-              ]}
-            >
-              {state}
-            </Text>
-            <View style={{ marginTop: 20 }}>
-              <ProgressBar
-                progress={progress}
-                height={14}
-                backgroundColor={colors.inputBorder}
-                fillColor={colors.accent}
-              />
-              <Text
-                style={[
-                  styles.info,
-                  { color: colors.text, textAlign: 'center', marginTop: 6 },
-                ]}
-              >
-                {progress} %
-              </Text>
-            </View>
-
-            <View style={{ marginTop: 12 }}>
-              <Text style={[styles.title, { color: colors.text }]}>
-                Select an audio file
-              </Text>
-              {/* la FlatList affichera les items juste après le header */}
-            </View>
-          </View>
-        </>
-      }
-      // footer contient ce qui était après la liste
-      ListFooterComponent={
-        <>
-          <View style={{ padding: 20, backgroundColor: colors.background }}>
-            <PrimaryButton
-              title={playing ? 'Stop' : 'Play MP3'}
-              onPress={playSelected}
-              color={colors.accent}
-              textColor={colors.buttonText}
-            />
-            <PrimaryButton
-              title="Send MP3 via BLE"
-              onPress={handleSendBleFile}
-              color={colors.accent}
-              textColor={colors.buttonText}
-            />
-          </View>
-        </>
-      }
-      // styles
-      contentContainerStyle={styles.content}
-      style={{ backgroundColor: colors.background }}
-      // optionnel : limite la hauteur de la liste si tu veux
-      // ListHeaderComponentStyle / ListFooterComponentStyle si besoin de marges
-    />
+      <PrimaryButton
+        title="Connexion BLE"
+        onPress={handleRealBle}
+        color={colors.accent}
+        textColor={colors.buttonText}
+      />
+      {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
+      <Text
+        style={[
+          styles.info,
+          { color: colors.text, textAlign: 'center', marginTop: 6 },
+        ]}
+      >
+        {state}
+      </Text>
+      <View style={{ marginTop: 20 }}>
+        <ProgressBar
+          progress={progress}
+          height={14}
+          backgroundColor={colors.inputBorder}
+          fillColor={colors.accent}
+        />
+        <Text
+          style={[
+            styles.info,
+            { color: colors.text, textAlign: 'center', marginTop: 6 },
+          ]}
+        >
+          {progress} %
+        </Text>
+        <PrimaryButton
+          title="Send WAV via BLE"
+          onPress={handleSendBleFile}
+          color={colors.accent}
+          textColor={colors.buttonText}
+        />
+      </View>
+    </View>
   );
 }
 
@@ -465,13 +346,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 20,
   },
-  list: {
-    maxHeight: 240,
-    borderWidth: 1,
-    borderColor: '#DDD',
-    borderRadius: 6,
-  },
-  listContent: { paddingVertical: 6 },
   section: { marginBottom: 20 },
   label: {
     fontSize: 16,
@@ -489,15 +363,4 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '500',
   },
-  item: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EEE',
-    backgroundColor: '#FFF',
-  },
-  itemActive: { backgroundColor: '#0A84FF' },
-  itemText: { fontSize: 16, color: '#111' },
-  itemTextActive: { color: '#FFF' },
-  controls: { marginTop: 16 },
 });
