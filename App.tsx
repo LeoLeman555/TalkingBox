@@ -31,6 +31,23 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(() => resolve(), ms));
 }
 
+function generateTtsFilename(): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+
+  return (
+    'tts_' +
+    d.getFullYear() +
+    pad(d.getMonth() + 1) +
+    pad(d.getDate()) +
+    '_' +
+    pad(d.getHours()) +
+    pad(d.getMinutes()) +
+    pad(d.getSeconds()) +
+    '.wav'
+  );
+}
+
 export default function App() {
   useBlePermissions();
 
@@ -60,14 +77,21 @@ export default function App() {
 
   const handleGeneratePlayExport = async () => {
     try {
-      const tts = await TtsService.generate(text, 'tts_test.wav');
-      console.log('Fichier interne créé :', tts.path);
+      const filename = generateTtsFilename();
+      console.log('[TTS][APP][START][filename=' + filename + ']');
+
+      const tts = await TtsService.generate(text, filename);
+      console.log('[TTS][APP][GENERATED][path=' + tts.path + ']');
+
       await TtsService.play(tts.path);
-      console.log('Fichier joué');
-      const uri = await TtsService.exportToMusic(tts.path, 'tts_test.wav');
-      console.log('Fichier exporté dans Music/TalkingBox/Prototype_1 :', uri);
+      console.log('[TTS][APP][PLAYED]');
+
+      const uri = await TtsService.exportToMusic(tts.path, filename);
+      console.log(
+        '[TTS][APP][EXPORTED][Music/TalkingBox/Prototype_1][uri=' + uri + ']',
+      );
     } catch (e) {
-      console.error('Erreur TTS :', e);
+      console.error('[TTS][APP][ERROR]', e);
     }
   };
 
@@ -336,15 +360,22 @@ export default function App() {
             /> */}
 
             <PrimaryButton
-              title="Générer MP3 TTS"
+              title="Générer TTS"
               onPress={async () => {
                 if (!text || text.trim() === '') return;
+
                 try {
-                  const filename = `tts_${Date.now()}.wav`;
+                  const filename = generateTtsFilename();
+                  console.log(
+                    '[TTS][APP][GENERATE_ONLY][filename=' + filename + ']',
+                  );
+
                   const result = await TtsService.generate(text, filename);
-                  console.log('TTS généré:', result.path);
+                  console.log(
+                    '[TTS][APP][GENERATED][path=' + result.path + ']',
+                  );
                 } catch (e) {
-                  console.error('Erreur TTS:', e);
+                  console.error('[TTS][APP][ERROR]', e);
                 }
               }}
               color={colors.accent}
@@ -352,7 +383,7 @@ export default function App() {
             />
 
             <PrimaryButton
-              title="Générer et lire TTS"
+              title="Exporter TTS"
               onPress={handleGeneratePlayExport}
               color={colors.accent}
               textColor={colors.buttonText}
