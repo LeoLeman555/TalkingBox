@@ -5,7 +5,10 @@ import {
   StyleSheet,
   useColorScheme,
   View,
+  FlatList,
+  Pressable,
 } from 'react-native';
+
 // import { MockBle } from './src/services/MockBle';
 import { BleService, BleDeviceInfo } from './src/services/BleService';
 import { PrimaryButton } from './src/components/PrimaryButton';
@@ -15,6 +18,7 @@ import { ProgressBar } from './src/components/ProgressBar';
 import { DeviceInfo } from './src/components/DeviceInfo';
 import { computeMeta, chunkFile } from './src/logic/FileChunker';
 import { TtsService } from './src/services/TtsService';
+import { listTtsWavFiles } from './src/utils/TtsFileSystem';
 
 // const mock = new MockBle();
 const realBle = new BleService();
@@ -46,11 +50,22 @@ export default function App() {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
+  const [screen, setScreen] = useState<'MAIN' | 'FILES'>('MAIN');
   const [text, setText] = useState('');
   const [state, setState] = useState('NOT CONNECTED');
   const [progress, setProgress] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
   const [selected, setSelected] = useState<{ filename: string } | null>(null);
+  const [ttsFiles, setTtsFiles] = useState<string[]>([]);
+
+  const refreshTtsFiles = async () => {
+    try {
+      const files = await listTtsWavFiles();
+      setTtsFiles(files);
+    } catch (e) {
+      console.error('[TTS][FS][ERROR]', e);
+    }
+  };
 
   const handleGenerateTTS = async () => {
     if (!text.trim()) return;
@@ -62,6 +77,7 @@ export default function App() {
       const tts = await TtsService.generate(text, filename);
       console.log('[TTS][APP][GENERATED][path=' + tts.path + ']');
       setSelected({ filename: tts.path });
+      refreshTtsFiles();
 
       const uri = await TtsService.exportToMusic(tts.path, filename);
       console.log('[TTS][APP][EXPORTED][uri=' + uri + ']');
@@ -253,9 +269,64 @@ export default function App() {
     }
   };
 
+  if (screen === 'FILES') {
+    refreshTtsFiles();
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        <Text
+          style={[styles.title, { color: colors.text, textAlign: 'center' }]}
+        >
+          Fichiers TTS
+        </Text>
+
+        <FlatList
+          data={ttsFiles}
+          keyExtractor={item => item}
+          contentContainerStyle={{ paddingHorizontal: 20 }}
+          renderItem={({ item }) => {
+            const name = item.split('/').pop() ?? item;
+            const isSelected = selected?.filename === item;
+
+            return (
+              <Pressable
+                onPress={() => {
+                  setSelected({ filename: item });
+                }}
+                style={{
+                  padding: 14,
+                  marginBottom: 8,
+                  borderRadius: 8,
+                  backgroundColor: isSelected
+                    ? colors.accent
+                    : colors.inputBorder,
+                }}
+              >
+                <Text
+                  style={{
+                    color: isSelected ? colors.buttonText : colors.text,
+                    fontWeight: '500',
+                  }}
+                >
+                  {name}
+                </Text>
+              </Pressable>
+            );
+          }}
+        />
+
+        <PrimaryButton
+          title="Retour"
+          onPress={() => setScreen('MAIN')}
+          color={colors.accent}
+          textColor={colors.buttonText}
+        />
+      </View>
+    );
+  }
+
   return (
-    <View style={{ padding: 20, backgroundColor: colors.background }}>
-      <Text style={[styles.title, { color: colors.text }]}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.text, textAlign: 'center' }]}>
         Talking Box — Prototype
       </Text>
       <View style={styles.section}>
@@ -293,6 +364,13 @@ export default function App() {
       <PrimaryButton
         title="Lire TTS"
         onPress={playTts}
+        color={colors.accent}
+        textColor={colors.buttonText}
+      />
+
+      <PrimaryButton
+        title="Fichiers TTS"
+        onPress={() => setScreen('FILES')}
         color={colors.accent}
         textColor={colors.buttonText}
       />
@@ -339,7 +417,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, padding: 20 },
   content: { padding: 20 },
   title: {
     fontSize: 28,
