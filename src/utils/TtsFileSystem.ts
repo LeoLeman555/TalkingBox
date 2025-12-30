@@ -14,3 +14,20 @@ export async function listTtsWavFiles(): Promise<string[]> {
     .map(f => f.path)
     .sort();
 }
+
+export function generateTtsFilename(): string {
+  const d = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+
+  return (
+    'tts_' +
+    d.getFullYear() +
+    pad(d.getMonth() + 1) +
+    pad(d.getDate()) +
+    '_' +
+    pad(d.getHours()) +
+    pad(d.getMinutes()) +
+    pad(d.getSeconds()) +
+    '.wav'
+  );
+}
