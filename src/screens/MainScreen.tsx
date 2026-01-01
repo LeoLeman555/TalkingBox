@@ -8,18 +8,16 @@ import {
 } from 'react-native';
 
 import { PrimaryButton } from '../components/PrimaryButton';
-import { useBlePermissions } from '../hooks/useBlePermissions';
 import { ProgressBar } from '../components/ProgressBar';
 import { DeviceInfo } from '../components/DeviceInfo';
-// import { MockBle } from './src/services/MockBle';
+import { useBlePermissions } from '../hooks/useBlePermissions';
 import { BleService, BleDeviceInfo } from '../services/BleService';
 import { TtsService } from '../services/TtsService';
 import { sendFileViaBle } from '../services/ble/sendFileViaBle';
 import { getColors } from '../theme/colors';
 import { generateTtsFilename } from '../utils/TtsFileSystem';
 
-// const mock = new MockBle();
-const realBle = new BleService();
+const ble = new BleService();
 
 type Props = {
   selectedTtsPath: string | null;
@@ -74,21 +72,13 @@ export function MainScreen({
     }
   };
 
-  // const handleSendMock = async () => {
-  //   setProgress(0);
-  //   setState('CONNECTING...');
-  //   await mock.scanAndConnect();
-  //   setProgress(100);
-  //   setState('CONNECTED');
-  // };
-
   const handleRealBle = async () => {
     setProgress(0);
     setState('CONNECTING...');
     setDeviceInfo(null);
 
     try {
-      const d = await realBle.scanAndConnect();
+      const d = await ble.scanAndConnect();
       if (!d) {
         setState('DISCONNECTED');
         return;
@@ -97,7 +87,7 @@ export function MainScreen({
       setState('CONNECTED 👍');
 
       try {
-        const info = await realBle.readDeviceInfo();
+        const info = await ble.readDeviceInfo();
         setDeviceInfo(info);
       } catch (infoError) {
         console.log('[BLE] readDeviceInfo error:', infoError);
@@ -120,7 +110,7 @@ export function MainScreen({
 
     try {
       await sendFileViaBle({
-        ble: realBle,
+        ble: ble,
         filePath: selectedTtsPath,
         setProgress,
         setState,
@@ -169,13 +159,6 @@ export function MainScreen({
         color={colors.accent}
         textColor={colors.buttonText}
       />
-
-      {/* <PrimaryButton
-              title="Connexion BLE - Mock"
-              onPress={handleSendMock}
-              color={colors.mock}
-              textColor={colors.buttonText}
-            /> */}
 
       <PrimaryButton
         title="Connexion BLE"
