@@ -16,6 +16,7 @@ import { TtsService } from '../services/TtsService';
 import { sendFileViaBle } from '../services/ble/sendFileViaBle';
 import { getColors } from '../theme/colors';
 import { generateTtsFilename } from '../utils/TtsFileSystem';
+import { createReminderService } from '../services/reminderService';
 
 const ble = new BleService();
 
@@ -39,6 +40,23 @@ export function MainScreen({
   const [state, setState] = useState('NOT CONNECTED');
   const [progress, setProgress] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
+
+  const handleTestReminder = async () => {
+    if (!text.trim()) return;
+
+    try {
+      const result = await createReminderService({
+        category: 'ACTIVITY',
+        title: 'Test',
+        message: text,
+        startDate: '2026-01-12',
+        time: '08:30',
+      });
+      console.log('[REMINDER][GENERATED]', result);
+    } catch (e) {
+      console.error('[REMINDER][ERROR]', e);
+    }
+  };
 
   const handleGenerateTTS = async () => {
     if (!text.trim()) return;
@@ -137,6 +155,13 @@ export function MainScreen({
           styles.input,
           { borderColor: colors.inputBorder, color: colors.text },
         ]}
+      />
+
+      <PrimaryButton
+        title="Test Reminder"
+        onPress={handleTestReminder}
+        color={colors.accent}
+        textColor={colors.buttonText}
       />
 
       <PrimaryButton
