@@ -24,6 +24,7 @@ type Props = {
   onSelectTts: (path: string | null) => void;
   onOpenFiles: () => void;
   onCreateReminder: () => void;
+  onViewReminders: () => void;
 };
 
 export function MainScreen({
@@ -31,6 +32,7 @@ export function MainScreen({
   onSelectTts,
   onOpenFiles,
   onCreateReminder,
+  onViewReminders,
 }: Props) {
   useBlePermissions();
 
@@ -142,13 +144,6 @@ export function MainScreen({
       />
 
       <PrimaryButton
-        title="Créer reminder"
-        onPress={onCreateReminder}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
-
-      <PrimaryButton
         title="Générer TTS"
         onPress={handleGenerateTTS}
         color={colors.accent}
@@ -165,6 +160,20 @@ export function MainScreen({
       <PrimaryButton
         title="Fichiers TTS"
         onPress={onOpenFiles}
+        color={colors.accent}
+        textColor={colors.buttonText}
+      />
+
+      <PrimaryButton
+        title="Créer reminder"
+        onPress={onCreateReminder}
+        color={colors.accent}
+        textColor={colors.buttonText}
+      />
+
+      <PrimaryButton
+        title="Voir les reminders"
+        onPress={onViewReminders}
         color={colors.accent}
         textColor={colors.buttonText}
       />
