@@ -8,6 +8,26 @@ export interface ReminderValidationError {
   message: string;
 }
 
+function isLeapYear(year: number): boolean {
+  if (year % 400 === 0) return true;
+  if (year % 100 === 0) return false;
+  return year % 4 === 0;
+}
+
+function getDaysInMonth(year: number, month: number): number {
+  switch (month) {
+    case 2:
+      return isLeapYear(year) ? 29 : 28;
+    case 4:
+    case 6:
+    case 9:
+    case 11:
+      return 30;
+    default:
+      return 31;
+  }
+}
+
 /**
  * Checks if a string is empty or whitespace.
  */
@@ -15,11 +35,24 @@ function isBlank(value: string | undefined | null): boolean {
   return !value || value.trim().length === 0;
 }
 
-/**
- * Checks if a date is in YYYY-MM-DD format.
- */
 function isValidDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+
+  const [yearStr, monthStr, dayStr] = value.split('-');
+
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+
+  if (month < 1 || month > 12) {
+    return false;
+  }
+
+  const daysInMonth = getDaysInMonth(year, month);
+
+  return day >= 1 && day <= daysInMonth;
 }
 
 /**
@@ -106,14 +139,14 @@ export function validateReminder(
   if (!isValidDate(reminder.startDate)) {
     errors.push({
       field: 'startDate',
-      message: 'Start date must be in YYYY-MM-DD format.',
+      message: 'Invalid date (calendar rules not respected).',
     });
   }
 
   if (!isValidTime(reminder.time)) {
     errors.push({
       field: 'time',
-      message: 'Time must be in HH:MM format.',
+      message: 'Invalid time (must be in HH:MM format).',
     });
   }
 
