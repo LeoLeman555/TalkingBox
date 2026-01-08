@@ -76,8 +76,8 @@ If you do not have write access to the repository:
 2. Clone your fork locally:
 
 ```bash
-git clone https://github.com/LeoLeman555/TalkingBox.git
-cd TalkingBox/
+git clone https://github.com/<your-username>/<repository-name>.git
+cd <repository-name>
 ```
 
 ### 2. Create a new branch
