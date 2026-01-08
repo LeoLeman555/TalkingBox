@@ -1,97 +1,167 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Talking Box
 
-# Getting Started
+This project is developed within the Make:able Challenge, which focuses on designing and building assistive technologies that improve daily life and autonomy for people with disabilities, using a user-centered and ethical design approach.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+This application allows a responsible adult to configure scheduled voice reminders and send them to an autonomous ESP32-based device designed to support time awareness and daily routines for people with cognitive disabilities.
 
-## Step 1: Start Metro
+## Overview
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+The application enables:
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+- Text-based message creation
+- Offline text-to-speech (TTS) generation into MP3 files
+- Reliable Bluetooth Low Energy (BLE) transfer to an ESP32 device
+- Scheduling and persistence of voice reminders
+- Clear device status feedback for configuration and debugging
 
-```sh
-# Using npm
-npm start
+The system is designed to work fully offline, without cloud services, ensuring privacy and reliability.
 
-# OR using Yarn
-yarn start
+## Technology Stack
+
+- **React Native** (no Expo)
+- **Android Native Module** (TextToSpeech → MP3)
+- **Bluetooth Low Energy**: `react-native-ble-plx`
+
+## Prerequisites
+
+- Git ≥ 2.30
+- Node.js ≥ 18
+- npm
+- Android Studio with Android SDK
+- Physical Android device (required for BLE testing)
+
+## Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/LeoLeman555/TalkingBox.git
+cd TalkingBox/
 ```
 
-## Step 2: Build and run your app
+### 2. Install dependencies
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```bash
+npm install
 ```
 
-### iOS
+### 3. Run the application (Android)
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```bash
+npx react-native run-android
 ```
 
-Then, and every time you update your native dependencies, run:
+## Project Structure
 
-```sh
-bundle exec pod install
+```text
+src/
+ ├─ components/      # Reusable UI components
+ ├─ screens/         # Application screens
+ ├─ services/        # BLE, TTS, mocks
+ ├─ utils/           # Shared utilities and helpers
+android/             # Native Android code (TTS module)
+App.tsx
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## Contributing
 
-```sh
-# Using npm
-npm run ios
+Contributions are welcome, provided the following rules are strictly respected.
+If you like the project, consider giving it a ⭐️ on GitHub — it really helps!
 
-# OR using Yarn
-yarn ios
+### 1. Fork the repository
+
+If you do not have write access to the repository:
+
+1. Click **Fork** on GitHub
+2. Clone your fork locally:
+
+```bash
+git clone https://github.com/LeoLeman555/TalkingBox.git
+cd TalkingBox/
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+### 2. Create a new branch
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+Always create a dedicated branch for your change and never work directly on main.
 
-## Step 3: Modify your app
+```bash
+git checkout -b type/<scope>-short-description
+```
 
-Now that you have successfully run the app, let's make changes!
+Examples:
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+```bash
+git checkout -b feat/ui-reminder-editor
+git checkout -b fix/ble-transfer-timeout
+git checkout -b refactor/tts-native-module
+```
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+### 3. Make your changes
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+- Implement your feature or fix
+- Test the application locally
+- Ensure the app starts and runs without crashes
+- Please if possible, test on a real Android device
 
-## Congratulations! :tada:
+Check modified files:
 
-You've successfully run and modified your React Native App. :partying_face:
+```bash
+git status
+```
 
-### Now what?
+### 4. Commit your changes
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+This project strictly follows Conventional Commits.
 
-# Troubleshooting
+Format:
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+```bash
+git commit -m "type(scope): short description"
+```
 
-# Learn More
+Examples:
 
-To learn more about React Native, take a look at the following resources:
+```bash
+git commit -m "feat(ui): add reminder editor screen"
+git commit -m "fix(ble): prevent crash after file transfer"
+git commit -m "refactor(tts): isolate android native module"
+```
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+Rules:
+
+- One logical change per commit
+- Description must be clear and concise
+
+### 5. Push your branch
+
+Push your branch to GitHub:
+
+```bash
+git push origin type/<scope>-short-description
+```
+
+### 6. Open a Pull Request
+
+On GitHub:
+
+1. Open a Pull Request from your branch to main
+2. Fill in the description with:
+   - What was changed
+   - Why it was changed
+   - How it was tested
+
+## Privacy
+
+- No cloud services
+- No user accounts
+- No analytics
+- No personal data stored outside
+
+This design complies with privacy-by-design principles and is suitable for vulnerable users.
+
+## Contact
+
+For any questions or feedback, feel free to contact me:
+
+- GitHub: [LeoLeman555](https://github.com/LeoLeman555)
+- Email: <leo.leman555@gmail.com>
