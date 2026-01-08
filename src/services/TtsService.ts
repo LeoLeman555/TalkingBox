@@ -40,7 +40,7 @@ export class TtsService {
   }
 
   /**
-   * Generate a WAV file from text using native Android TTS.
+   * Generate a mp3 file from text using native Android TTS.
    */
   static async generate(
     text: string,
@@ -54,9 +54,9 @@ export class TtsService {
       throw new Error('[TTS][JS][INVALID_TEXT] Text is empty');
     }
 
-    if (!filename.endsWith('.wav')) {
+    if (!filename.endsWith('.mp3')) {
       throw new Error(
-        '[TTS][JS][INVALID_FILENAME] Filename must end with .wav',
+        '[TTS][JS][INVALID_FILENAME] Filename must end with .mp3',
       );
     }
 
@@ -73,7 +73,7 @@ export class TtsService {
   }
 
   /**
-   * Play a local WAV file (prototype / debug only).
+   * Play a local mp3 file (prototype / debug only).
    */
   static async play(internalPath: string): Promise<void> {
     this.ensureAndroid();
@@ -90,7 +90,7 @@ export class TtsService {
   }
 
   /**
-   * Export a local WAV file to public Music directory.
+   * Export a local mp3 file to public Music directory.
    */
   static async exportToMusic(
     internalPath: string,
@@ -100,9 +100,9 @@ export class TtsService {
 
     this.log(`[EXPORT][REQUEST][name=${publicFilename}]`);
 
-    if (!publicFilename.endsWith('.wav')) {
+    if (!publicFilename.endsWith('.mp3')) {
       throw new Error(
-        '[TTS][JS][INVALID_FILENAME] Filename must end with .wav',
+        '[TTS][JS][INVALID_FILENAME] Filename must end with .mp3',
       );
     }
 

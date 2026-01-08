@@ -5,6 +5,7 @@ import {
   StyleSheet,
   useColorScheme,
   View,
+  Alert,
 } from 'react-native';
 
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -54,6 +55,11 @@ export function MainScreen({
 
       const uri = await TtsService.exportToMusic(tts.path, filename);
       console.log('[TTS][APP][EXPORTED][uri=' + uri + ']');
+
+      Alert.alert(
+      'TTS Generated',
+      'Your audio file has been created successfully.'
+      );
     } catch (e) {
       console.error('[TTS][APP][ERROR]', e);
     }

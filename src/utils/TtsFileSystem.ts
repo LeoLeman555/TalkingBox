@@ -28,6 +28,6 @@ export function generateTtsFilename(): string {
     pad(d.getHours()) +
     pad(d.getMinutes()) +
     pad(d.getSeconds()) +
-    '.wav'
+    '.mp3'
   );
 }
