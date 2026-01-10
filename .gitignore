@@ -3,7 +3,10 @@
 .DS_Store
 
 .vscode/
-firmware/
+
+__pycache__/
+*.pyc
+
 # Xcode
 #
 build/
