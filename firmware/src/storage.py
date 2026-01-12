@@ -2,6 +2,7 @@
 from machine import SPI, Pin
 import os
 import sdcard
+import uhashlib, ubinascii
 
 
 class Storage:
@@ -52,3 +53,22 @@ class Storage:
             return True
         except OSError:
             return False
+
+    def start_temp_file(self, filename):
+        self._tmp_path = f"{self.MP3_DIR}/.tmp_{filename}"
+        with open(self._tmp_path, "wb"):
+            pass
+
+    def append_chunk(self, data):
+        with open(self._tmp_path, "ab") as f:
+            f.write(data)
+
+    def finalize_file(self):
+        h = uhashlib.sha256()
+        with open(self._tmp_path, "rb") as f:
+            for b in iter(lambda: f.read(1024), b""):
+                h.update(b)
+        digest = ubinascii.hexlify(h.digest()).decode()
+        final = self._tmp_path.replace(".tmp_", "")
+        os.rename(self._tmp_path, final)
+        return digest
