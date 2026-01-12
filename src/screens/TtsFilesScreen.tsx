@@ -10,7 +10,7 @@ import {
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { getColors } from '../theme/colors';
-import { listTtsWavFiles } from '../utils/TtsFileSystem';
+import { listTtsMp3Files } from '../utils/TtsFileSystem';
 
 type Props = {
   selectedTtsPath: string | null;
@@ -29,7 +29,7 @@ export function TtsFilesScreen({
   const [files, setFiles] = useState<string[]>([]);
 
   useEffect(() => {
-    listTtsWavFiles().then(setFiles);
+    listTtsMp3Files().then(setFiles);
   }, []);
 
   return (
