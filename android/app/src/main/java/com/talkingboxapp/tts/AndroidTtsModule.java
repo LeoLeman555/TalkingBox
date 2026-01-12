@@ -25,9 +25,8 @@ import java.util.UUID;
  *
  * Responsibilities (prototype scope):
  * - Initialize Google TextToSpeech engine (FR-FR).
- * - Generate a local mp3 file from input text.
- * - Optionally export generated file to public Music directory.
- * - Optionally play a local audio file.
+ * - Generate a local MP3 file from input text.
+ * - Export generated file to public Music directory.
  *
  * Limitations (known and accepted for prototype):
  * - Single active generation at a time (non-reentrant).
@@ -137,7 +136,7 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
   }
 
   /**
-   * Generate a mp3 file from input text.
+   * Generate a MP3 file from input text.
    *
    * @param text Input text to synthesize.
    * @param filename Output filename (must end with .mp3).
@@ -188,7 +187,7 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
   }
 
   /**
-   * Export a generated mp3 file to public Music directory (MediaStore).
+   * Export a generated MP3 file to public Music directory (MediaStore).
    */
   @ReactMethod
   public void exportToMusic(String internalPath, String publicName, Promise promise) {

@@ -42,7 +42,14 @@ export function MainScreen({
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
 
   const handleGenerateTTS = async () => {
-    if (!text.trim()) return;
+    if (!text.trim()) {
+      console.warn('[TTS][APP][ABORT] Empty text input');
+      Alert.alert(
+        'Invalid message',
+        'Please enter a message before generating audio.'
+      );
+      return;
+    }
 
     try {
       const filename = generateTtsFilename();
@@ -57,8 +64,8 @@ export function MainScreen({
       console.log('[TTS][APP][EXPORTED][uri=' + uri + ']');
 
       Alert.alert(
-      'TTS Generated',
-      'Your audio file has been created successfully.'
+        'TTS Generated',
+        'Your audio file has been created successfully.'
       );
     } catch (e) {
       console.error('[TTS][APP][ERROR]', e);
@@ -67,9 +74,14 @@ export function MainScreen({
 
   const playTts = async (): Promise<void> => {
     if (!selectedTtsPath) {
-      console.error('[TTS][APP] No file selected');
+      console.warn('[TTS][APP][PLAY_ABORT] No TTS file selected');
+      Alert.alert(
+        'No audio selected',
+        'Please generate or select a TTS file before playing.'
+      );
       return;
     }
+
     try {
       console.log('[TTS][APP][PLAY][path=' + selectedTtsPath + ']');
       await TtsService.play(selectedTtsPath);
@@ -186,7 +198,7 @@ export function MainScreen({
       <Text style={[styles.info, { color: colors.text }]}>{progress} %</Text>
 
       <PrimaryButton
-        title="Send mp3 via BLE"
+        title="Send MP3 via BLE"
         onPress={handleSendBleFile}
         color={colors.accent}
         textColor={colors.buttonText}

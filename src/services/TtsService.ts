@@ -40,7 +40,7 @@ export class TtsService {
   }
 
   /**
-   * Generate a mp3 file from text using native Android TTS.
+   * Generate a MP3 file from text using native Android TTS.
    */
   static async generate(
     text: string,
@@ -73,7 +73,7 @@ export class TtsService {
   }
 
   /**
-   * Play a local mp3 file (prototype / debug only).
+   * Play a local MP3 file (prototype / debug only).
    */
   static async play(internalPath: string): Promise<void> {
     this.ensureAndroid();
@@ -90,7 +90,7 @@ export class TtsService {
   }
 
   /**
-   * Export a local mp3 file to public Music directory.
+   * Export a local MP3 file to public Music directory (prototype / debug only).
    */
   static async exportToMusic(
     internalPath: string,
