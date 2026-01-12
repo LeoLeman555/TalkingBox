@@ -25,9 +25,8 @@ import java.util.UUID;
  *
  * Responsibilities (prototype scope):
  * - Initialize Google TextToSpeech engine (FR-FR).
- * - Generate a local WAV file from input text.
- * - Optionally export generated file to public Music directory.
- * - Optionally play a local audio file.
+ * - Generate a local MP3 file from input text.
+ * - Export generated file to public Music directory.
  *
  * Limitations (known and accepted for prototype):
  * - Single active generation at a time (non-reentrant).
@@ -96,10 +95,9 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
               "tts/" + currentFilename
             );
 
-            // WAV header is 44 bytes minimum
-            if (!file.exists() || file.length() < 44) {
-              reject("TTS_INVALID_FILE", "Generated WAV file is invalid");
-              return;
+            if (!file.exists() || file.length() < 1000) {
+            reject("TTS_INVALID_FILE", "Generated MP3 file is invalid");
+            return;
             }
 
             WritableMap result = Arguments.createMap();
@@ -138,10 +136,10 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
   }
 
   /**
-   * Generate a WAV file from input text.
+   * Generate a MP3 file from input text.
    *
    * @param text Input text to synthesize.
-   * @param filename Output filename (must end with .wav).
+   * @param filename Output filename (must end with .mp3).
    * @param promise React Native promise resolved with file info.
    */
   @ReactMethod
@@ -158,9 +156,9 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
       return;
     }
 
-    if (!filename.endsWith(".wav")) {
-      promise.reject("TTS_INVALID_FILENAME", "Filename must end with .wav");
-      return;
+    if (!filename.endsWith(".mp3")) {
+    promise.reject("TTS_INVALID_FILENAME", "Filename must end with .mp3");
+    return;
     }
 
     try {
@@ -189,7 +187,7 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
   }
 
   /**
-   * Export a generated WAV file to public Music directory (MediaStore).
+   * Export a generated MP3 file to public Music directory (MediaStore).
    */
   @ReactMethod
   public void exportToMusic(String internalPath, String publicName, Promise promise) {
@@ -204,7 +202,7 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
 
       ContentValues values = new ContentValues();
       values.put(MediaStore.Audio.Media.DISPLAY_NAME, publicName);
-      values.put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav");
+      values.put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg");
       values.put(
         MediaStore.Audio.Media.RELATIVE_PATH,
         Environment.DIRECTORY_MUSIC + "/TalkingBox/TTS"
