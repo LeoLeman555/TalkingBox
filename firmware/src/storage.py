@@ -17,19 +17,25 @@ class Storage:
 
     def _mount_sd(self):
         """Mount the SD card."""
-        spi = SPI(
-            2,
-            baudrate=10_000_000,
-            polarity=0,
-            phase=0,
-            sck=Pin(18),
-            mosi=Pin(23),
-            miso=Pin(19)
-        )
+        try:
+            spi = SPI(
+                2,
+                baudrate=10_000_000,
+                polarity=0,
+                phase=0,
+                sck=Pin(18),
+                mosi=Pin(23),
+                miso=Pin(19)
+            )
 
-        sd = sdcard.SDCard(spi, Pin(5))  # CS on GPIO5
-        os.mount(sd, "/sd")
-        print("[STORAGE] SD card mounted at /sd")
+            sd = sdcard.SDCard(spi, Pin(13))  # CS = GPIO13
+            os.mount(sd, "/sd")
+            print("[STORAGE] SD card mounted at /sd")
+
+        except OSError as e:
+            print("[STORAGE] SD mount failed:", e)
+            raise
+
 
     def _ensure_directories(self):
         """Ensure required directories exist."""

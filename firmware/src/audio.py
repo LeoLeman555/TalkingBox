@@ -17,9 +17,9 @@ class AudioPlayer:
 
     def _init_(
         self,
-        uart_id=1,
-        tx_pin=4,
-        rx_pin=5,
+        uart_id=2,
+        tx_pin=17,
+        rx_pin=16,
         baudrate=9600,
         volume=20
     ):
