@@ -2,10 +2,7 @@
 import time
 from machine import Pin
 
-from ble import BleService
 from audio import AudioPlayer
-from storage import Storage
-
 
 class Button:
     """Physical button handler."""
@@ -37,16 +34,15 @@ class Controller:
     def on_button_pressed(self):
         print("[CTRL] Button pressed -> play", self.track)
         self.audio.play(self.track)
-        self.track += 1
 
 
 def main():
     """Main firmware entry point."""
     print("[START] Talking Box firmware booting")
 
-    storage = Storage()
     audio = AudioPlayer()
-    ble = BleService(storage)
+
+    audio._init_
 
     print("[START] All modules are ready")
 

@@ -46,7 +46,7 @@ class AudioPlayer:
     # Low-level protocol
     # ------------------------------------------------------------------
 
-    def _send_command(self, cmd, param=0):
+    def _send_command(self, cmd, param):
         high = (param >> 8) & 0xFF
         low = param & 0xFF
 
@@ -79,7 +79,6 @@ class AudioPlayer:
         if not isinstance(track, int) or track <= 0:
             print("[AUDIO] Invalid track:", track)
             return
-
         self.current_track = track
         print("[AUDIO] Play track", track)
         self._send_command(self.CMD_PLAY_INDEX, track)
