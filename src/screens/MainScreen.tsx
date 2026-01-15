@@ -134,7 +134,7 @@ export function MainScreen({
         setState,
       });
     } catch (e) {
-      console.error('[BLE FILE] ERROR sending mp3:', e);
+      console.error('[BLE FILE] ERROR sending wav:', e);
       setState('ERROR');
     }
   };
@@ -198,7 +198,7 @@ export function MainScreen({
       <Text style={[styles.info, { color: colors.text }]}>{progress} %</Text>
 
       <PrimaryButton
-        title="Send MP3 via BLE"
+        title="Send WAV via BLE"
         onPress={handleSendBleFile}
         color={colors.accent}
         textColor={colors.buttonText}

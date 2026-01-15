@@ -25,7 +25,7 @@ import java.util.UUID;
  *
  * Responsibilities (prototype scope):
  * - Initialize Google TextToSpeech engine (FR-FR).
- * - Generate a local MP3 file from input text.
+ * - Generate a local WAV file from input text.
  * - Export generated file to public Music directory.
  *
  * Limitations (known and accepted for prototype):
@@ -96,7 +96,7 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
             );
 
             if (!file.exists() || file.length() < 1000) {
-            reject("TTS_INVALID_FILE", "Generated MP3 file is invalid");
+            reject("TTS_INVALID_FILE", "Generated WAV file is invalid");
             return;
             }
 
@@ -136,10 +136,10 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
   }
 
   /**
-   * Generate a MP3 file from input text.
+   * Generate a WAV file from input text.
    *
    * @param text Input text to synthesize.
-   * @param filename Output filename (must end with .mp3).
+   * @param filename Output filename (must end with .wav).
    * @param promise React Native promise resolved with file info.
    */
   @ReactMethod
@@ -156,8 +156,8 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
       return;
     }
 
-    if (!filename.endsWith(".mp3")) {
-    promise.reject("TTS_INVALID_FILENAME", "Filename must end with .mp3");
+    if (!filename.endsWith(".wav")) {
+    promise.reject("TTS_INVALID_FILENAME", "Filename must end with .wav");
     return;
     }
 
@@ -187,7 +187,7 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
   }
 
   /**
-   * Export a generated MP3 file to public Music directory (MediaStore).
+   * Export a generated WAV file to public Music directory (MediaStore).
    */
   @ReactMethod
   public void exportToMusic(String internalPath, String publicName, Promise promise) {
