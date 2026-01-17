@@ -98,4 +98,14 @@ The deployment script performs the following actions:
 - Copies only the required firmware files to the ESP32 filesystem
 - Resets the board after deployment
 
+## Hardware & System Test
+
+A basic sanity check script is provided to verify ESP32 MicroPython functionality, GPIO control, and system info. This ensures the board is operational before running the main firmware.
+
+Run the test:
+
+```bash
+mpremote connect COMx run firmware/src/test_start.py
+```
+
 Refer to the main project README for global architecture and integration details.
