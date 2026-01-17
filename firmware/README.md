@@ -66,6 +66,8 @@ firmware/
 
 ## Deployment to ESP32
 
+### Manual deployment (reference)
+
 Files must be copied explicitly to the ESP32 filesystem.
 
 ```bash
@@ -73,6 +75,7 @@ mpremote cp firmware/src/start.py :start.py
 mpremote cp firmware/src/ble.py :ble.py
 mpremote cp firmware/src/audio.py :audio.py
 mpremote cp firmware/src/storage.py :storage.py
+mpremote cp firmware/src/sdcard.py :sdcard.py
 ```
 
 After deployment, reset the board:
@@ -80,5 +83,19 @@ After deployment, reset the board:
 ```bash
 mpremote reset
 ```
+
+### Windows (recommended)
+
+Firmware deployment is handled via a dedicated PowerShell script. From the project root:
+
+```powershell
+.\deploy.ps1
+```
+
+The deployment script performs the following actions:
+
+- Verifies tool availability (mpremote)
+- Copies only the required firmware files to the ESP32 filesystem
+- Resets the board after deployment
 
 Refer to the main project README for global architecture and integration details.
