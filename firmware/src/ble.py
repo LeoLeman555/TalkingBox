@@ -95,7 +95,6 @@ class BleService:
 
         if raw == b"\x02":
             self.end_requested = True
-            self._finalize_file()
             return
 
         if len(raw) != 17 or raw[0] != 0x01:
@@ -147,7 +146,7 @@ class BleService:
 
     # ---------- Finalization ----------
 
-    def _finalize_file(self):
+    def finalize_file(self):
         calc = self.storage.finalize_file()
 
         if not calc.startswith(self.metadata["sha256_short"]):

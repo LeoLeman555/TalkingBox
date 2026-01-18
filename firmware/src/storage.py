@@ -70,10 +70,16 @@ class Storage:
             f.write(data)
 
     def finalize_file(self):
+        """Finalize temp file, compute SHA256, and rename."""
         h = uhashlib.sha256()
+
         with open(self._tmp_path, "rb") as f:
-            for b in iter(lambda: f.read(1024), b""):
-                h.update(b)
+            while True:
+                chunk = f.read(1024)
+                if not chunk:
+                    break
+                h.update(chunk)
+
         digest = ubinascii.hexlify(h.digest()).decode()
         final = self._tmp_path.replace(".tmp_", "")
         os.rename(self._tmp_path, final)

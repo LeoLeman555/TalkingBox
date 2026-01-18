@@ -15,11 +15,11 @@ class AudioPlayer:
     CMD_RESUME = 0x0D
     CMD_STOP = 0x16
 
-    def _init_(
+    def __init__(
         self,
         uart_id=2,
-        tx_pin=17,
-        rx_pin=16,
+        tx_pin=16,
+        rx_pin=17,
         baudrate=9600,
         volume=20
     ):

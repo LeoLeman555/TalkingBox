@@ -37,7 +37,6 @@ class Controller:
     def on_button_pressed(self):
         print("[CTRL] Button pressed -> play", self.track)
         self.audio.play(self.track)
-        self.track += 1
 
 
 def main():
@@ -60,7 +59,10 @@ def main():
 
     while True:
         button.poll()
-        time.sleep(0.01)
+        if ble.end_requested:
+            ble.end_requested = False
+            ble.finalize_file()
+        time.sleep(0.05)
 
 
 if __name__ == "__main__":
