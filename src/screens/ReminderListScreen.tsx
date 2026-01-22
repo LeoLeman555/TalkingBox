@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, useColorScheme } from 'react-native';
+import { View, Text, FlatList, StyleSheet, useColorScheme, TouchableOpacity } from 'react-native';
 
 import { getColors } from '../theme/colors';
 import { getAllReminders } from '../storage/reminderRepository';
@@ -9,9 +9,10 @@ import { PrimaryButton } from '../components/PrimaryButton';
 type Props = {
   onCreate: () => void;
   onBack: () => void;
+  onSelect: (reminder: Reminder) => void;
 };
 
-export function ReminderListScreen({ onCreate, onBack }: Props) {
+export function ReminderListScreen({ onCreate, onBack, onSelect }: Props) {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
@@ -34,7 +35,10 @@ export function ReminderListScreen({ onCreate, onBack }: Props) {
   };
 
   const renderItem = ({ item }: { item: Reminder }) => (
-    <View style={[styles.card, { borderColor: colors.inputBorder }]}>
+    <TouchableOpacity
+      onPress={() => onSelect(item)}
+      style={[styles.card, { borderColor: colors.inputBorder }]}
+    >
       <Text style={[styles.title, { color: colors.text }]}>{item.title}</Text>
 
       <Text style={[styles.meta, { color: colors.text }]}>
@@ -48,7 +52,7 @@ export function ReminderListScreen({ onCreate, onBack }: Props) {
       <Text style={[styles.status, { color: colors.text }]}>
         {item.status} | {item.syncStatus}
       </Text>
-    </View>
+    </TouchableOpacity>
   );
 
   return (
