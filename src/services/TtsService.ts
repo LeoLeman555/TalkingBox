@@ -8,6 +8,7 @@ const { AndroidTts } = NativeModules;
 export interface TtsAudioResult {
   path: string;
   filename: string;
+  format: 'wav' | 'mp3';
   size: number;
 }
 
@@ -21,7 +22,6 @@ export interface TtsAudioResult {
  *
  * Limitations:
  * - Android only.
- * - Thin wrapper, no business logic.
  */
 export class TtsService {
   private static log(message: string): void {
@@ -40,7 +40,10 @@ export class TtsService {
   }
 
   /**
-   * Generate a MP3 file from text using native Android TTS.
+   * Generate an audio file from text using native Android TTS.
+   *
+   * @param text Text to synthesize
+   * @param filename Output filename (.wav or .mp3)
    */
   static async generate(
     text: string,
@@ -54,17 +57,32 @@ export class TtsService {
       throw new Error('[TTS][JS][INVALID_TEXT] Text is empty');
     }
 
-    if (!filename.endsWith('.mp3')) {
+    if (!filename.endsWith('.wav') && !filename.endsWith('.mp3')) {
       throw new Error(
-        '[TTS][JS][INVALID_FILENAME] Filename must end with .mp3',
+        '[TTS][JS][INVALID_FILENAME] Must end with .wav or .mp3',
       );
     }
 
     try {
-      const result: TtsAudioResult = await AndroidTts.generate(text, filename);
-      this.log(
-        `[GENERATE][SUCCESS][file=${result.filename}][size=${result.size}]`,
+      const result: TtsAudioResult = await AndroidTts.generate(
+        text,
+        filename,
       );
+
+      if (!result?.path || !result?.format) {
+        throw new Error('[TTS][JS][INVALID_NATIVE_RESULT]');
+      }
+
+      if (!filename.endsWith(`.${result.format}`)) {
+        throw new Error(
+          `[TTS][JS][FORMAT_MISMATCH] expected ${filename} but got .${result.format}`,
+        );
+      }
+
+      this.log(
+        `[GENERATE][SUCCESS][file=${result.filename}][format=${result.format}][size=${result.size}]`,
+      );
+
       return result;
     } catch (error: any) {
       this.log(`[GENERATE][ERROR][message=${error?.message ?? 'unknown'}]`);
@@ -73,12 +91,16 @@ export class TtsService {
   }
 
   /**
-   * Play a local MP3 file (prototype / debug only).
+   * Play a local audio file (debug only).
    */
   static async play(internalPath: string): Promise<void> {
     this.ensureAndroid();
 
     this.log(`[PLAY][REQUEST][path=${internalPath}]`);
+
+    if (!internalPath || internalPath.length === 0) {
+      throw new Error('[TTS][JS][INVALID_PATH]');
+    }
 
     try {
       await AndroidTts.play(internalPath);
@@ -90,7 +112,10 @@ export class TtsService {
   }
 
   /**
-   * Export a local MP3 file to public Music directory (prototype / debug only).
+   * Export a local audio file to public Music directory.
+   *
+   * @param internalPath Internal file path
+   * @param publicFilename Public filename (.wav or .mp3)
    */
   static async exportToMusic(
     internalPath: string,
@@ -100,9 +125,12 @@ export class TtsService {
 
     this.log(`[EXPORT][REQUEST][name=${publicFilename}]`);
 
-    if (!publicFilename.endsWith('.mp3')) {
+    if (
+      !publicFilename.endsWith('.wav') &&
+      !publicFilename.endsWith('.mp3')
+    ) {
       throw new Error(
-        '[TTS][JS][INVALID_FILENAME] Filename must end with .mp3',
+        '[TTS][JS][INVALID_FILENAME] Must end with .wav or .mp3',
       );
     }
 
@@ -111,6 +139,7 @@ export class TtsService {
         internalPath,
         publicFilename,
       );
+
       this.log(`[EXPORT][SUCCESS][uri=${uri}]`);
       return uri;
     } catch (error: any) {

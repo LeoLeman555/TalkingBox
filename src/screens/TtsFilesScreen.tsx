@@ -10,7 +10,7 @@ import {
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { getColors } from '../theme/colors';
-import { listTtsMp3Files } from '../utils/TtsFileSystem';
+import { listTtsAudioFiles } from '../utils/TtsFileSystem';
 
 type Props = {
   selectedTtsPath: string | null;
@@ -29,19 +29,27 @@ export function TtsFilesScreen({
   const [files, setFiles] = useState<string[]>([]);
 
   useEffect(() => {
-    listTtsMp3Files().then(setFiles);
+    listTtsAudioFiles().then(setFiles);
   }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>Fichiers TTS</Text>
+      <Text style={[styles.title, { color: colors.text }]}>
+        Fichiers TTS
+      </Text>
 
       <FlatList
         data={files}
         keyExtractor={item => item}
+        ListEmptyComponent={
+          <Text style={{ color: colors.text, textAlign: 'center' }}>
+            Aucun fichier audio généré
+          </Text>
+        }
         renderItem={({ item }) => {
           const name = item.split('/').pop() ?? item;
           const isSelected = selectedTtsPath === item;
+          const isWav = name.endsWith('.wav');
 
           return (
             <Pressable
@@ -57,10 +65,13 @@ export function TtsFilesScreen({
             >
               <Text
                 style={{
-                  color: isSelected ? colors.buttonText : colors.text,
+                  color: isSelected
+                    ? colors.buttonText
+                    : colors.text,
+                  fontWeight: isWav ? '700' : '500',
                 }}
               >
-                {name}
+                {name} {isWav ? '(WAV)' : '(MP3)'}
               </Text>
             </Pressable>
           );

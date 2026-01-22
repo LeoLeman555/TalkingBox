@@ -13,7 +13,7 @@ import { ProgressBar } from '../components/ProgressBar';
 import { DeviceInfo } from '../components/DeviceInfo';
 import { useBlePermissions } from '../hooks/useBlePermissions';
 import { BleService, BleDeviceInfo } from '../services/BleService';
-import { TtsService } from '../services/TtsService';
+import { TtsService, TtsAudioResult } from '../services/TtsService';
 import { sendFileViaBle } from '../services/ble/sendFileViaBle';
 import { getColors } from '../theme/colors';
 import { generateTtsFilename } from '../utils/TtsFileSystem';
@@ -43,21 +43,28 @@ export function MainScreen({
 
   const handleGenerateTTS = async () => {
     if (!text.trim()) {
-      console.warn('[TTS][APP][ABORT] Empty text input');
       Alert.alert(
         'Invalid message',
-        'Please enter a message before generating audio.'
+        'Please enter a message before generating audio.',
       );
       return;
     }
 
     try {
-      const filename = generateTtsFilename();
+      const filename = generateTtsFilename('.mp3'); // MP3 or WAV
       console.log('[TTS][APP][START][filename=' + filename + ']');
 
-      const tts = await TtsService.generate(text, filename);
-      console.log('[TTS][APP][GENERATED][path=' + tts.path + ']');
+      const tts: TtsAudioResult = await TtsService.generate(text, filename);
 
+      // if (tts.format !== 'wav') {
+      //   Alert.alert(
+      //     'Audio incompatible',
+      //     'Generated audio is not WAV and cannot be sent to the device.',
+      //   );
+      //   return;
+      // }
+
+      console.log('[TTS][APP][GENERATED][path=' + tts.path + ']');
       onSelectTts(tts.path);
 
       const uri = await TtsService.exportToMusic(tts.path, filename);
@@ -65,19 +72,19 @@ export function MainScreen({
 
       Alert.alert(
         'TTS Generated',
-        'Your audio file has been created successfully.'
+        'Audio file generated successfully.',
       );
     } catch (e) {
       console.error('[TTS][APP][ERROR]', e);
+      Alert.alert('TTS Error', 'Failed to generate audio.');
     }
   };
 
   const playTts = async (): Promise<void> => {
     if (!selectedTtsPath) {
-      console.warn('[TTS][APP][PLAY_ABORT] No TTS file selected');
       Alert.alert(
         'No audio selected',
-        'Please generate or select a TTS file before playing.'
+        'Please generate or select a TTS file before playing.',
       );
       return;
     }
@@ -101,6 +108,7 @@ export function MainScreen({
         setState('DISCONNECTED');
         return;
       }
+
       setProgress(100);
       setState('CONNECTED 👍');
 
@@ -122,7 +130,7 @@ export function MainScreen({
 
   const handleSendBleFile = async () => {
     if (!selectedTtsPath) {
-      console.error('[BLE FILE] No file selected');
+      Alert.alert('No file', 'No TTS file selected.');
       return;
     }
 
@@ -134,7 +142,7 @@ export function MainScreen({
         setState,
       });
     } catch (e) {
-      console.error('[BLE FILE] ERROR sending mp3:', e);
+      console.error('[BLE FILE][ERROR]', e);
       setState('ERROR');
     }
   };
@@ -158,7 +166,7 @@ export function MainScreen({
       />
 
       <PrimaryButton
-        title="Générer TTS"
+        title="Générer TTS (WAV)"
         onPress={handleGenerateTTS}
         color={colors.accent}
         textColor={colors.buttonText}
@@ -195,10 +203,13 @@ export function MainScreen({
         backgroundColor={colors.inputBorder}
         fillColor={colors.accent}
       />
-      <Text style={[styles.info, { color: colors.text }]}>{progress} %</Text>
+
+      <Text style={[styles.info, { color: colors.text }]}>
+        {progress} %
+      </Text>
 
       <PrimaryButton
-        title="Send MP3 via BLE"
+        title="Envoyer audio via BLE"
         onPress={handleSendBleFile}
         color={colors.accent}
         textColor={colors.buttonText}
