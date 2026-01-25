@@ -26,6 +26,8 @@ type Props = {
   onOpenFiles: () => void;
 };
 
+type AudioExtension = '.wav' | '.mp3';
+
 export function MainScreen({
   selectedTtsPath,
   onSelectTts,
@@ -41,17 +43,14 @@ export function MainScreen({
   const [progress, setProgress] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
 
-  const handleGenerateTTS = async () => {
+  const handleGenerateTTS = async (extension : AudioExtension = '.wav') => {
     if (!text.trim()) {
-      Alert.alert(
-        'Invalid message',
-        'Please enter a message before generating audio.',
-      );
+      Alert.alert('Message vide', 'Veuillez saisir un message vocal.');
       return;
     }
 
     try {
-      const filename = generateTtsFilename('.mp3'); // MP3 or WAV
+      const filename = generateTtsFilename(extension); // MP3 or WAV
       console.log('[TTS][APP][START][filename=' + filename + ']');
 
       const tts: TtsAudioResult = await TtsService.generate(text, filename);
@@ -71,8 +70,8 @@ export function MainScreen({
       console.log('[TTS][APP][EXPORTED][uri=' + uri + ']');
 
       Alert.alert(
-        'TTS Generated',
-        'Audio file generated successfully.',
+        "Message vocal généré",
+        "Fichier audio généré avec succès, vous pouvez le lire dans l'application",
       );
     } catch (e) {
       console.error('[TTS][APP][ERROR]', e);
@@ -82,10 +81,7 @@ export function MainScreen({
 
   const playTts = async (): Promise<void> => {
     if (!selectedTtsPath) {
-      Alert.alert(
-        'No audio selected',
-        'Please generate or select a TTS file before playing.',
-      );
+      Alert.alert('Aucun message', 'Veuillez générer un message.');
       return;
     }
 
@@ -150,15 +146,15 @@ export function MainScreen({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Text style={[styles.title, { color: colors.text }]}>
-        Talking Box — Prototype
+        Talking Box App — Prototype
       </Text>
 
-      <Text style={[styles.label, { color: colors.text }]}>Message</Text>
+      <Text style={[styles.label, { color: colors.text }]}>Message vocal</Text>
 
       <TextInput
         value={text}
         onChangeText={setText}
-        placeholder="Saisir un message"
+        placeholder="Exemple : “Bonjour à tous !”"
         style={[
           styles.input,
           { borderColor: colors.inputBorder, color: colors.text },
@@ -166,42 +162,46 @@ export function MainScreen({
       />
 
       <PrimaryButton
-        title="Générer TTS (WAV)"
-        onPress={handleGenerateTTS}
-        color={colors.accent}
-        textColor={colors.buttonText}
+        title="Générer le message vocal (WAV)"
+        onPress={() => handleGenerateTTS('.wav')}
+        color={colors.primary}
+        textColor={colors.primaryText}
       />
 
       <PrimaryButton
-        title="Lire TTS"
+        title="Générer le message vocal (MP3)"
+        onPress={() => handleGenerateTTS('.mp3')}
+        color={colors.disabled}
+        textColor={colors.primaryText}
+      />
+
+      <PrimaryButton
+        title="Lire le message vocal sélectionné"
         onPress={playTts}
-        color={colors.accent}
-        textColor={colors.buttonText}
+        color={colors.primary}
+        textColor={colors.primaryText}
       />
 
+      
       <PrimaryButton
-        title="Fichiers TTS"
+        title="Sélectionner un message vocal"
         onPress={onOpenFiles}
-        color={colors.accent}
-        textColor={colors.buttonText}
+        color={colors.primary}
+        textColor={colors.primaryText}
       />
 
-      <PrimaryButton
-        title="Connexion BLE"
-        onPress={handleRealBle}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
+      <Text style={[styles.label, { color: colors.text }]}>Communication Bluetooth</Text>
 
       {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
 
       <Text style={[styles.info, { color: colors.text }]}>{state}</Text>
 
+
       <ProgressBar
         progress={progress}
         height={14}
         backgroundColor={colors.inputBorder}
-        fillColor={colors.accent}
+        fillColor={colors.primary}
       />
 
       <Text style={[styles.info, { color: colors.text }]}>
@@ -209,10 +209,18 @@ export function MainScreen({
       </Text>
 
       <PrimaryButton
-        title="Envoyer audio via BLE"
+        title="Connecter la Talking Box"
+        onPress={handleRealBle}
+        color={colors.primary}
+        textColor={colors.primaryText}
+      />
+
+
+      <PrimaryButton
+        title="Envoyer le message vocal"
         onPress={handleSendBleFile}
-        color={colors.accent}
-        textColor={colors.buttonText}
+        color={colors.primary}
+        textColor={colors.primaryText}
       />
     </View>
   );
@@ -230,18 +238,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     borderRadius: 8,
-    fontSize: 16,
+    fontSize: 18,
     marginBottom: 12,
   },
   label: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '600',
     marginBottom: 8,
   },
   info: {
     marginTop: 6,
     paddingBottom: 10,
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '500',
     textAlign: 'center',
   },

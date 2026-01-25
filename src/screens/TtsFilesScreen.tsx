@@ -35,15 +35,15 @@ export function TtsFilesScreen({
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       <Text style={[styles.title, { color: colors.text }]}>
-        Fichiers TTS
+        Fichiers Audios
       </Text>
 
       <FlatList
         data={files}
         keyExtractor={item => item}
         ListEmptyComponent={
-          <Text style={{ color: colors.text, textAlign: 'center' }}>
-            Aucun fichier audio généré
+          <Text style={styles.info}>
+            AUCUN FICHIER AUDIO GÉNÉRÉ... 
           </Text>
         }
         renderItem={({ item }) => {
@@ -59,14 +59,14 @@ export function TtsFilesScreen({
                 borderRadius: 8,
                 marginBottom: 8,
                 backgroundColor: isSelected
-                  ? colors.accent
+                  ? colors.primary
                   : colors.inputBorder,
               }}
             >
               <Text
                 style={{
                   color: isSelected
-                    ? colors.buttonText
+                    ? colors.primaryText
                     : colors.text,
                   fontWeight: isWav ? '700' : '500',
                 }}
@@ -81,8 +81,8 @@ export function TtsFilesScreen({
       <PrimaryButton
         title="Retour"
         onPress={onBack}
-        color={colors.accent}
-        textColor={colors.buttonText}
+        color={colors.secondary}
+        textColor={colors.secondaryText}
       />
     </View>
   );
@@ -94,6 +94,13 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     marginBottom: 20,
+    textAlign: 'center',
+  },
+  info: {
+    marginTop: 6,
+    paddingBottom: 10,
+    fontSize: 20,
+    fontWeight: '500',
     textAlign: 'center',
   },
 });
