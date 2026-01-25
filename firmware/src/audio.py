@@ -1,112 +1,87 @@
 # audio.py
-from machine import UART, Pin
+from machine import I2S, Pin
+import ustruct
 import time
 
-
 class AudioPlayer:
-    """DFPlayer Mini driver for ESP32 (MicroPython)"""
 
-    # DFPlayer commands
-    CMD_NEXT = 0x01
-    CMD_PREVIOUS = 0x02
-    CMD_PLAY_INDEX = 0x03
-    CMD_SET_VOLUME = 0x06
-    CMD_PAUSE = 0x0E
-    CMD_RESUME = 0x0D
-    CMD_STOP = 0x16
+    def __init__(self):
+        # Playback state
+        global _volume
 
-    def _init_(
-        self,
-        uart_id=2,
-        tx_pin=17,
-        rx_pin=16,
-        baudrate=9600,
-        volume=20
-    ):
-        print("[AUDIO] Initializing DFPlayer")
+        _volume = 1.0   # 0.0 to 1.0
 
-        self.uart = UART(
-            uart_id,
-            baudrate=baudrate,
-            tx=Pin(tx_pin),
-            rx=Pin(rx_pin)
+        self.audio = I2S(
+            0,
+            sck=Pin(26),     # BCLK
+            ws=Pin(25),      # LRC
+            sd=Pin(27),      # DIN
+            mode=I2S.TX,
+            bits=16,
+            format=I2S.MONO,
+            rate=16000,
+            ibuf=8000
         )
 
-        self.current_track = None
-        self.volume = volume
+    def apply_volume(self, buf, volume):
+        samples = len(buf) // 2
+        out = bytearray(len(buf))
 
-        # DFPlayer needs time to boot
-        time.sleep(2)
+        for i in range(samples):
+            s = ustruct.unpack_from("<h", buf, i * 2)[0]
+            s = int(s * volume)
 
-        self.set_volume(volume)
+            # Clamp
+            if s > 32767:
+                s = 32767
+            elif s < -32768:
+                s = -32768
 
-        print("[AUDIO] DFPlayer ready")
+            ustruct.pack_into("<h", out, i * 2, s)
 
-    # ------------------------------------------------------------------
-    # Low-level protocol
-    # ------------------------------------------------------------------
-
-    def _send_command(self, cmd, param=0):
-        high = (param >> 8) & 0xFF
-        low = param & 0xFF
-
-        frame = bytearray([
-            0x7E,  # start
-            0xFF,  # version
-            0x06,  # length
-            cmd,
-            0x00,  # no feedback
-            high,
-            low,
-        ])
-
-        checksum = 0 - sum(frame[1:])
-        checksum &= 0xFFFF
-
-        frame.append((checksum >> 8) & 0xFF)
-        frame.append(checksum & 0xFF)
-        frame.append(0xEF)  # end
-
-        self.uart.write(frame)
-        time.sleep(0.1)  # DFPlayer processing time
-
-    # ------------------------------------------------------------------
-    # Public API (simple & explicit)
-    # ------------------------------------------------------------------
-
-    def play(self, track):
-        """Play track by index (001.mp3, 002.mp3, ...)"""
-        if not isinstance(track, int) or track <= 0:
-            print("[AUDIO] Invalid track:", track)
-            return
-
-        self.current_track = track
-        print("[AUDIO] Play track", track)
-        self._send_command(self.CMD_PLAY_INDEX, track)
-
-    def stop(self):
-        print("[AUDIO] Stop")
-        self._send_command(self.CMD_STOP)
+        return out
 
     def pause(self):
-        print("[AUDIO] Pause")
-        self._send_command(self.CMD_PAUSE)
+        global _paused
+        _paused = True
 
     def resume(self):
-        print("[AUDIO] Resume")
-        self._send_command(self.CMD_RESUME)
+        global _paused
+        _paused = False
 
-    def next(self):
-        print("[AUDIO] Next track")
-        self._send_command(self.CMD_NEXT)
-
-    def previous(self):
-        print("[AUDIO] Previous track")
-        self._send_command(self.CMD_PREVIOUS)
+    def stop(self):
+        global _stop
+        _stop = True
 
     def set_volume(self, volume):
-        """Set volume (0–30)"""
-        volume = max(0, min(30, volume))
-        self.volume = volume
-        print("[AUDIO] Volume =", volume)
-        self._send_command(self.CMD_SET_VOLUME, volume)
+        global _volume
+        if volume < 0:
+            volume = 0
+        elif volume > 1:
+            volume = 1
+        _volume = volume
+
+    def play_wav(self, filename = str):
+        global _paused, _stop
+
+        _paused = False
+        _stop = False
+
+        with open(filename, "rb") as f:
+            f.seek(44)  # Skip WAV header
+
+            while True:
+
+                if _paused:
+                    time.sleep_ms(20)
+                    continue
+
+                if _stop:
+                    break
+
+                data = f.read(1024)
+                if not data:
+                    break
+
+                data = self.apply_volume(data, _volume)
+                self.audio.write(data)

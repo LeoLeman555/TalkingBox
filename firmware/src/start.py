@@ -1,9 +1,10 @@
 # start.py
 import time
+import _thread
 from machine import Pin
 
 from ble import BleService
-from audio import AudioPlayer
+from basicaudio import AudioPlayer, _playing, _paused 
 from storage import Storage
 
 
@@ -34,11 +35,16 @@ class Controller:
         self.audio = audio
         self.track = 1
 
-    def on_button_pressed(self):
-        print("[CTRL] Button pressed -> play", self.track)
-        self.audio.play(self.track)
-        self.track += 1
-
+    def on_button_pressed(self, audio):
+        global _playing, _paused
+        if not _playing:
+            print("[CTRL] Button pressed -> play", self.track)
+            _thread.start_new_thread(audio.play_wav, (self.track,))
+        elif _playing:
+            if not _paused:
+                audio.pause()
+            elif _paused:
+                audio.resume()
 
 def main():
     """Main firmware entry point."""
@@ -60,7 +66,11 @@ def main():
 
     while True:
         button.poll()
-        time.sleep(0.01)
+        if ble.end_requested:
+            ble.end_requested = False
+            ble.finalize_file()
+        time.sleep(0.05)
+
 
 
 if __name__ == "__main__":
