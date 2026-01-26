@@ -4,9 +4,8 @@ import _thread
 from machine import Pin
 
 from ble import BleService
-from basicaudio import AudioPlayer, _playing, _paused 
+from basicaudio import AudioPlayer, _playing, _paused
 from storage import Storage
-
 
 class Button:
     """Physical button handler."""
@@ -33,18 +32,18 @@ class Controller:
 
     def __init__(self, audio):
         self.audio = audio
-        self.track = 1
+        self.track = "/sd/mp3/received.wav"
 
-    def on_button_pressed(self, audio):
+    def on_button_pressed(self):
         global _playing, _paused
         if not _playing:
             print("[CTRL] Button pressed -> play", self.track)
-            _thread.start_new_thread(audio.play_wav, (self.track,))
+            _thread.start_new_thread(self.audio.play_wav, (self.track,))
         elif _playing:
             if not _paused:
-                audio.pause()
+                self.audio.pause()
             elif _paused:
-                audio.resume()
+                self.audio.resume()
 
 def main():
     """Main firmware entry point."""

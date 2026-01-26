@@ -1,7 +1,10 @@
 from machine import I2S, Pin
 import time
 
+_playing = False
+_paused = False
 class AudioPlayer:
+    global _playing, _paused
 
     def __init__(self):
         # Playback state
@@ -17,7 +20,7 @@ class AudioPlayer:
             mode=I2S.TX,
             bits=16,
             format=I2S.MONO,
-            rate=16000,
+            rate=24000,
             ibuf=8000
         )
 
@@ -30,21 +33,17 @@ class AudioPlayer:
         _paused = False
 
     def stop(self):
-        global _stop, _playing
-        _stop = True
+        global _playing
         _playing = False
 
     def play_wav(self, filename: str):
-        global _stop, _paused, _volume
+        global _paused, _playing
 
-        _stop = False
         _paused = False
+        _playing = True
 
         with open(filename, "rb") as f:
             f.seek(44)  # Skip WAV header
-            global _playing
-
-            _playing = True
 
             while True:
 
@@ -52,7 +51,7 @@ class AudioPlayer:
                     time.sleep_ms(20)
                     continue
 
-                if _stop:
+                if not _playing:
                     break
 
                 data = f.read(1024)
