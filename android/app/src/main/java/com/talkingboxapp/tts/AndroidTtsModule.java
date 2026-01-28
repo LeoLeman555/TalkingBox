@@ -147,10 +147,10 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
   }
 
   /**
-   * Generate a MP3 file from input text.
+   * Generate a WAV file from input text.
    *
    * @param text Input text to synthesize.
-   * @param filename Output filename (must end with .mp3).
+   * @param filename Output filename (must end with .wav).
    * @param promise React Native promise resolved with file info.
    */
   @ReactMethod
@@ -198,7 +198,7 @@ public class AndroidTtsModule extends ReactContextBaseJavaModule {
   }
 
   /**
-   * Export a generated MP3 file to public Music directory (MediaStore).
+   * Export a generated WAV file to public Music directory (MediaStore).
    */
   @ReactMethod
   public void exportToMusic(String internalPath, String publicName, Promise promise) {

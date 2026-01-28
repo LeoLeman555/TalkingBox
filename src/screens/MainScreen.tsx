@@ -51,7 +51,7 @@ export function MainScreen({
     }
 
     try {
-      const filename = generateTtsFilename('.mp3'); // MP3 or WAV
+      const filename = generateTtsFilename('.wav'); // MP3 or WAV
       console.log('[TTS][APP][START][filename=' + filename + ']');
 
       const tts: TtsAudioResult = await TtsService.generate(text, filename);
