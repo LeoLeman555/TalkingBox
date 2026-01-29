@@ -114,7 +114,7 @@ class BleService:
             return
 
         self.metadata = {
-            "filename": "received.mp3",
+            "filename": "received.wav",
             "total_chunks": total_chunks,
             "total_size": total_size,
             "sha256_short": ubinascii.hexlify(raw[9:17]).decode(),
@@ -156,6 +156,7 @@ class BleService:
         self._notify({"event": "stored", "sha256": calc})
         self.metadata = None
         self.bytes_written = 0
+        print("[BLE] File finalised")
 
     # ---------- Utils ----------
 
