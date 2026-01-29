@@ -4,8 +4,9 @@ import _thread
 from machine import Pin
 
 from ble import BleService
-from basicaudio import AudioPlayer, _playing, _paused
+from audio import AudioPlayer
 from storage import Storage
+from rtc import TimeService
 
 class Button:
     """Physical button handler."""
@@ -58,6 +59,7 @@ def main():
     storage = Storage()
     audio = AudioPlayer()
     ble = BleService(storage)
+    rtc = TimeService
 
     print("[START] All modules are ready")
 
