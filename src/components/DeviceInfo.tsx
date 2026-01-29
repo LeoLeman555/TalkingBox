@@ -10,9 +10,6 @@ interface Props {
 export function DeviceInfo({ info, colors }: Props) {
   return (
     <View style={styles.container}>
-      <Text style={[styles.title, { color: colors.text }]}>
-        Device Information
-      </Text>
 
       <Text style={[styles.item, { color: colors.text }]}>
         Name: {info.name ?? 'UNKNOWN'}
@@ -21,14 +18,6 @@ export function DeviceInfo({ info, colors }: Props) {
       <Text style={[styles.item, { color: colors.text }]}>ID: {info.id}</Text>
 
       <Text style={[styles.item, { color: colors.text }]}>MTU: {info.mtu}</Text>
-
-      <Text style={[styles.item, { color: colors.text }]}>
-        RSSI: {info.rssi ?? 'N/A'}
-      </Text>
-
-      <Text style={[styles.item, { color: colors.text }]}>
-        Firmware: {info.firmwareVersion ?? 'N/A'}
-      </Text>
     </View>
   );
 }

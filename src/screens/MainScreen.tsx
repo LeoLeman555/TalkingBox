@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   TextInput,
   Text,
@@ -6,6 +6,7 @@ import {
   useColorScheme,
   View,
   Alert,
+  AppState
 } from 'react-native';
 
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -43,7 +44,46 @@ export function MainScreen({
   const [progress, setProgress] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
 
-  const handleGenerateTTS = async (extension : AudioExtension = '.wav') => {
+  /* ---------------- BLE state sync on screen focus ---------------- */
+
+  useEffect(() => {
+    const syncBleState = async () => {
+      if (!ble.isConnected()) {
+        setState('NOT CONNECTED');
+        setProgress(0);
+        setDeviceInfo(null);
+        return;
+      }
+
+      setState('CONNECTED');
+      setProgress(100);
+
+      try {
+        const info = await ble.readDeviceInfo();
+        setDeviceInfo(info);
+      } catch (e) {
+        console.log('[BLE] readDeviceInfo failed', e);
+        setDeviceInfo(null);
+      }
+    };
+
+    syncBleState();
+
+    const subscription = AppState.addEventListener('change', bleState => {
+      if (bleState === 'active') {
+        syncBleState();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+
+  /* ---------------- TTS ---------------- */
+
+  const handleGenerateTTS = async (extension: AudioExtension = '.wav') => {
     if (!text.trim()) {
       Alert.alert('Message vide', 'Veuillez saisir un message vocal.');
       return;
@@ -93,7 +133,13 @@ export function MainScreen({
     }
   };
 
+  /* ---------------- BLE ---------------- */
+
   const handleRealBle = async () => {
+    if (ble.isConnected()) {
+      Alert.alert('Bluetooth', 'Talking Box déjà connectée.');
+      return;
+    }
     setProgress(0);
     setState('CONNECTING...');
     setDeviceInfo(null);
@@ -101,12 +147,12 @@ export function MainScreen({
     try {
       const d = await ble.scanAndConnect();
       if (!d) {
-        setState('DISCONNECTED');
+        setState('NOT CONNECTED');
         return;
       }
 
+      setState('CONNECTED');
       setProgress(100);
-      setState('CONNECTED 👍');
 
       try {
         const info = await ble.readDeviceInfo();
@@ -118,8 +164,8 @@ export function MainScreen({
       }
     } catch (error) {
       console.log('[BLE] Connection error:', error);
+      setState('NOT CONNECTED');
       setProgress(0);
-      setState('DISCONNECTED');
       setDeviceInfo(null);
     }
   };
@@ -127,6 +173,11 @@ export function MainScreen({
   const handleSendBleFile = async () => {
     if (!selectedTtsPath) {
       Alert.alert('No file', 'No TTS file selected.');
+      return;
+    }
+
+    if (!ble.isConnected()) {
+      Alert.alert('Bluetooth', 'Talking Box non connectée.');
       return;
     }
 
@@ -142,6 +193,8 @@ export function MainScreen({
       setState('ERROR');
     }
   };
+
+  /* ---------------- UI ---------------- */
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -162,16 +215,9 @@ export function MainScreen({
       />
 
       <PrimaryButton
-        title="Générer le message vocal (WAV)"
+        title="Générer le message vocal"
         onPress={() => handleGenerateTTS('.wav')}
         color={colors.primary}
-        textColor={colors.primaryText}
-      />
-
-      <PrimaryButton
-        title="Générer le message vocal (MP3)"
-        onPress={() => handleGenerateTTS('.mp3')}
-        color={colors.disabled}
         textColor={colors.primaryText}
       />
 
@@ -182,7 +228,6 @@ export function MainScreen({
         textColor={colors.primaryText}
       />
 
-      
       <PrimaryButton
         title="Sélectionner un message vocal"
         onPress={onOpenFiles}
@@ -190,12 +235,13 @@ export function MainScreen({
         textColor={colors.primaryText}
       />
 
-      <Text style={[styles.label, { color: colors.text }]}>Communication Bluetooth</Text>
+      <Text style={[styles.label, { color: colors.text }]}>
+        Communication Bluetooth
+      </Text>
 
       {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
 
       <Text style={[styles.info, { color: colors.text }]}>{state}</Text>
-
 
       <ProgressBar
         progress={progress}
@@ -204,9 +250,7 @@ export function MainScreen({
         fillColor={colors.primary}
       />
 
-      <Text style={[styles.info, { color: colors.text }]}>
-        {progress} %
-      </Text>
+      <Text style={[styles.info, { color: colors.text }]}>{progress} %</Text>
 
       <PrimaryButton
         title="Connecter la Talking Box"
@@ -214,7 +258,6 @@ export function MainScreen({
         color={colors.primary}
         textColor={colors.primaryText}
       />
-
 
       <PrimaryButton
         title="Envoyer le message vocal"

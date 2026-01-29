@@ -6,23 +6,23 @@ from micropython import const
 
 
 class BleService:
-    """BLE service handling MP3 file reception."""
+    """BLE service handling file reception."""
 
     SERVICE_UUID = bluetooth.UUID("12345678-1234-5678-1234-56789abcdef0")
     CHAR_START_UUID = bluetooth.UUID("12345678-1234-5678-1234-56789abcdef1")
     CHAR_CHUNK_UUID = bluetooth.UUID("12345678-1234-5678-1234-56789abcdef2")
     CHAR_STATUS_UUID = bluetooth.UUID("12345678-1234-5678-1234-56789abcdef3")
 
-    FLAG_READ = const(0x02)
     FLAG_WRITE = const(0x08)
     FLAG_WRITE_NR = const(0x04)
     FLAG_NOTIFY = const(0x10)
+    FLAG_READ = const(0x02)
 
     _IRQ_CENTRAL_CONNECT = 1
     _IRQ_CENTRAL_DISCONNECT = 2
     _IRQ_GATTS_WRITE = 3
 
-    BLE_NAME = "TALKING BOX"
+    BLE_NAME = "MEMO - TALKING BOX"
     MAX_FILE_SIZE = 8_000_000
 
     def __init__(self, storage):
@@ -126,7 +126,9 @@ class BleService:
         self.bytes_written = 0
         self.end_requested = False
 
-        self._notify({"event": "start_ack"})
+        print('[BLE] START ok', total_chunks, 'chunks')
+
+        self._notify({'event': 'start_ack'})
 
     def _on_chunk_write(self):
         raw = self.ble.gatts_read(self._handle_chunk)
@@ -134,6 +136,7 @@ class BleService:
         payload = raw[4:]
 
         if seq != self.expected_seq:
+            print('[BLE] seq error', seq, self.expected_seq)
             self._notify({"event": "chunk_error", "msg": "seq mismatch"})
             return
 
@@ -141,10 +144,8 @@ class BleService:
         self.bytes_written += len(payload)
         self.expected_seq += 1
 
-        if seq % 8 == 0:
-            self._notify({"event": "chunk_ack", "seq": seq})
-
-    # ---------- Finalization ----------
+        if seq % 32 == 0:
+            self._notify({'event': 'ack', 'seq': seq})
 
     def finalize_file(self):
         calc = self.storage.finalize_file()
