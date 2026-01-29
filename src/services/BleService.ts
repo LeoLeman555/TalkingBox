@@ -18,7 +18,7 @@ export class BleService {
   private manager = new BleManager();
   private connected: Device | null = null;
 
-  public chunkSize = 180;
+  public chunkSize = 400;
 
   public isConnected(): boolean {
     return this.connected !== null;

@@ -151,7 +151,7 @@ class BleService:
         self.bytes_written += len(payload)
         self.expected_seq += 1
 
-        if seq % 32 == 0:
+        if seq % 2 == 0:
             self._notify({'event': 'ack', 'seq': seq})
 
     def finalize_file(self):

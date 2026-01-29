@@ -49,8 +49,8 @@ export async function sendFileViaBle({
           startAck = true;
           break;
 
-        case 'chunk_ack': {
-          const p = Math.floor((msg.received_count / meta.totalChunks) * 100);
+        case 'ack': {
+          const p = Math.floor((msg.seq / meta.totalChunks) * 100);
           console.log(`[STATUS] Chunk ack: seq=${msg.seq}, progress=${p}%`);
           setProgress(p);
           break;
@@ -93,12 +93,9 @@ export async function sendFileViaBle({
 
     console.log('[BLE FILE] Sending chunks...');
     setState('SEND CHUNKS');
-    let i = 0;
     for await (const { seq, payload } of chunkFile(filePath, ble.chunkSize)) {
       if (failed) throw new Error('Transfer aborted');
-      console.log(`[BLE FILE] Sending chunk seq=${seq}, len=${payload.length}`);
       await ble.writeChunk(seq, payload);
-      if (++i % 8 === 0) await delay(10);
     }
 
     console.log('[BLE FILE] Sending END...');
