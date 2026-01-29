@@ -18,7 +18,7 @@ export class BleService {
   private manager = new BleManager();
   private connected: Device | null = null;
 
-  public chunkSize = 16;
+  public chunkSize = 180;
 
   public isConnected(): boolean {
     return this.connected !== null;
@@ -64,7 +64,7 @@ export class BleService {
               const mtuValue = Number(await d.requestMTU(512));
               if (!isNaN(mtuValue)) {
                 // Reserve 20 bytes for BLE header, max payload = MTU - 20
-                this.chunkSize = Math.min(180, mtuValue - 20);
+                this.chunkSize = Math.min(160, mtuValue - 23);
                 console.log(
                   '[BLE] MTU:',
                   mtuValue,
@@ -114,7 +114,7 @@ export class BleService {
     buf.writeUInt16BE(this.chunkSize, 7); // chunk size
     shaBytes.copy(buf, 9); // SHA short
 
-    await this.connected.writeCharacteristicWithResponseForService(
+    await this.connected.writeCharacteristicWithoutResponseForService(
       SERVICE_UUID,
       CHAR_START,
       buf.toString('base64'),

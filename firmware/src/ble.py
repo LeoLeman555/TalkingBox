@@ -45,6 +45,9 @@ class BleService:
 
     def _setup(self):
         self.ble.active(True)
+
+        self.ble.config(mtu=247)
+
         self.ble.irq(self._irq)
 
         service = (
@@ -56,9 +59,10 @@ class BleService:
             ),
         )
 
-        (
-            (self._handle_start, self._handle_chunk, self._handle_status),
-        ) = self.ble.gatts_register_services((service,))
+        ((self._handle_start, self._handle_chunk, self._handle_status),) = \
+            self.ble.gatts_register_services((service,))
+
+        self.ble.gatts_set_buffer(self._handle_chunk, 512, True)
 
         self.ble.gap_advertise(100_000, self._adv_payload())
         print("[BLE] Advertising as", self.BLE_NAME)
@@ -109,6 +113,8 @@ class BleService:
             | raw[6]
         )
 
+        chunk_size = (raw[7] << 8) | raw[8]
+
         if total_size <= 0 or total_size > self.MAX_FILE_SIZE:
             self._notify({"event": "start_error", "msg": "invalid size"})
             return
@@ -117,6 +123,7 @@ class BleService:
             "filename": "received.wav",
             "total_chunks": total_chunks,
             "total_size": total_size,
+            "chunk_size": chunk_size,
             "sha256_short": ubinascii.hexlify(raw[9:17]).decode(),
         }
 
@@ -126,9 +133,9 @@ class BleService:
         self.bytes_written = 0
         self.end_requested = False
 
-        print('[BLE] START ok', total_chunks, 'chunks')
+        print("[BLE] START ok", total_chunks, "chunks, chunk_size =", chunk_size)
 
-        self._notify({'event': 'start_ack'})
+        self._notify({"event": "start_ack"})
 
     def _on_chunk_write(self):
         raw = self.ble.gatts_read(self._handle_chunk)
@@ -136,7 +143,7 @@ class BleService:
         payload = raw[4:]
 
         if seq != self.expected_seq:
-            print('[BLE] seq error', seq, self.expected_seq)
+            print("[BLE] seq error", seq, self.expected_seq)
             self._notify({"event": "chunk_error", "msg": "seq mismatch"})
             return
 
