@@ -19,17 +19,28 @@ function Fail($msg) {
 
 Write-Host "=== Talking Box | ESP32 Firmware Deployment ===" -ForegroundColor Magenta
 
-# --- Configuration ---
+# ------------------------------------------------------------------
+# Configuration
+# ------------------------------------------------------------------
 $FirmwarePath = "firmware/src"
 $Files = @(
-  "start.py",
   "ble.py",
   "audio.py",
   "storage.py",
-  "sdcard.py"
+  "sdcard.py",
+  "start.py"
 )
 
-# --- Pre-flight checks ---
+# Known USB-UART VID:PID commonly used by ESP32 boards
+$KnownEspUsbIds = @(
+  "1a86:7523", # CH340
+  "10c4:ea60", # CP210x
+  "0403:6001"  # FTDI
+)
+
+# ------------------------------------------------------------------
+# Pre-flight checks
+# ------------------------------------------------------------------
 Info "Checking mpremote availability..."
 if (-not (Get-Command mpremote -ErrorAction SilentlyContinue)) {
   Fail "mpremote is not installed or not available in PATH."
@@ -45,22 +56,121 @@ foreach ($file in $Files) {
 }
 Success "All firmware files are present"
 
-# --- Deployment ---
-Info "Starting firmware deployment..."
+# ------------------------------------------------------------------
+# Device detection (source of truth: mpremote)
+# ------------------------------------------------------------------
+Info "Detecting devices via mpremote..."
+$devLines = mpremote devs 2>$null
+if (-not $devLines) {
+  Fail "No devices detected by mpremote."
+}
 
+$devices = @()
+foreach ($line in $devLines) {
+  if ($line -match '^(COM\d+)\s+([0-9a-fA-F:]+)\s+(.+?)\s') {
+    $devices += [PSCustomObject]@{
+      Port        = $matches[1]
+      UsbId       = $matches[2]
+      Vendor      = $matches[3]
+      IsLikelyEsp = $KnownEspUsbIds -contains $matches[2]
+    }
+  }
+}
+
+if ($devices.Count -eq 0) {
+  Fail "Unable to parse mpremote device list."
+}
+
+# ------------------------------------------------------------------
+# Port selection
+# ------------------------------------------------------------------
+$preferred = $devices | Where-Object { $_.IsLikelyEsp }
+
+if ($preferred.Count -eq 1) {
+  $ComPort = $preferred[0].Port
+  Success "ESP32 auto-detected: $ComPort ($($preferred[0].UsbId))"
+} else {
+  Info "Available serial devices:"
+  for ($i = 0; $i -lt $devices.Count; $i++) {
+    $flag = if ($devices[$i].IsLikelyEsp) { "ESP?" } else { "" }
+    Write-Host "[$i] $($devices[$i].Port)  $($devices[$i].UsbId)  $flag"
+  }
+
+  $inputValue = Read-Host "Select ESP32 COM port (index or COMx)"
+
+  # Case 1: index
+  if ($inputValue -match '^\d+$') {
+    $idx = [int]$inputValue
+    if ($idx -ge $devices.Count) {
+      Fail "Index out of range."
+    }
+    $ComPort = $devices[$idx].Port
+  }
+  # Case 2: COMx
+  elseif ($inputValue -match '^COM\d+$') {
+    $match = $devices | Where-Object { $_.Port -ieq $inputValue }
+    if (-not $match) {
+      Fail "COM port $inputValue not found in detected devices."
+    }
+    $ComPort = $match.Port
+  }
+  else {
+    Fail "Invalid input. Use index (e.g. 0) or port name (e.g. COM11)."
+  }
+
+  Success "Selected port: $ComPort"
+}
+
+# ------------------------------------------------------------------
+# Connection test (hard gate)
+# ------------------------------------------------------------------
+Info "Testing connection to $ComPort..."
+try {
+  mpremote connect $ComPort ls > $null
+} catch {
+  Fail "Unable to communicate with device on $ComPort. Port may be busy or not an ESP32."
+}
+Success "Connection successful"
+
+# ------------------------------------------------------------------
+# Deployment confirmation
+# ------------------------------------------------------------------
+Info "Deployment summary:"
+Write-Host "  Target device : $ComPort"
+Write-Host "  Firmware path : $FirmwarePath"
+Write-Host "  Files to transfer (in order):"
+
+foreach ($file in $Files) {
+  Write-Host "   - $file"
+}
+
+$confirm = Read-Host "Proceed with deployment? (y/N)"
+if ($confirm -notmatch '^(y|yes)$') {
+  Warn "Deployment aborted by user."
+  exit 0
+}
+
+Success "Deployment confirmed"
+
+
+# ------------------------------------------------------------------
+# Deployment
+# ------------------------------------------------------------------
+Info "Starting firmware deployment..."
 foreach ($file in $Files) {
   $source = Join-Path $FirmwarePath $file
   $target = ":$file"
 
   Info "Copying $file"
-  mpremote cp $source $target
+  mpremote connect $ComPort cp $source $target
 }
-
 Success "All files successfully copied"
 
-# --- Reset ---
+# ------------------------------------------------------------------
+# Reset
+# ------------------------------------------------------------------
 Info "Resetting ESP32..."
-mpremote reset
+mpremote connect $ComPort reset
 Success "ESP32 reset completed"
 
 Write-Host "Deployment completed successfully." -ForegroundColor Green

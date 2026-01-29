@@ -30,20 +30,26 @@ class Button:
 class Controller:
     """High-level user interaction controller."""
 
-    def __init__(self, audio):
+    def __init__(self, audio: AudioPlayer):
         self.audio = audio
         self.track = "/sd/mp3/received.wav"
 
     def on_button_pressed(self):
-        global _playing, _paused
-        if not _playing:
+        if not self.audio.is_playing():
             print("[CTRL] Button pressed -> play", self.track)
-            _thread.start_new_thread(self.audio.play_wav, (self.track,))
-        elif _playing:
-            if not _paused:
-                self.audio.pause()
-            elif _paused:
-                self.audio.resume()
+            _thread.start_new_thread(
+                self.audio.play_wav,
+                (self.track,)
+            )
+            return
+
+        if self.audio.is_paused():
+            print("[CTRL] Resume")
+            self.audio.resume()
+        else:
+            print("[CTRL] Pause")
+            self.audio.pause()
+
 
 def main():
     """Main firmware entry point."""
