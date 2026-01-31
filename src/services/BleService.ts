@@ -18,13 +18,12 @@ export class BleService {
   private manager = new BleManager();
   private connected: Device | null = null;
 
-  public chunkSize = 16; // default, recalculated on connect
+  public chunkSize = 480;
 
   public isConnected(): boolean {
     return this.connected !== null;
   }
 
-  /** One-line docstring: scan and connect to ESP32. */
   async scanAndConnect(timeoutMs = 8000): Promise<Device> {
     console.log('[BLE] Start scan');
 
@@ -65,7 +64,7 @@ export class BleService {
               const mtuValue = Number(await d.requestMTU(512));
               if (!isNaN(mtuValue)) {
                 // Reserve 20 bytes for BLE header, max payload = MTU - 20
-                this.chunkSize = Math.min(180, mtuValue - 20);
+                this.chunkSize = Math.min(160, mtuValue - 23);
                 console.log(
                   '[BLE] MTU:',
                   mtuValue,
@@ -115,7 +114,7 @@ export class BleService {
     buf.writeUInt16BE(this.chunkSize, 7); // chunk size
     shaBytes.copy(buf, 9); // SHA short
 
-    await this.connected.writeCharacteristicWithResponseForService(
+    await this.connected.writeCharacteristicWithoutResponseForService(
       SERVICE_UUID,
       CHAR_START,
       buf.toString('base64'),
@@ -149,7 +148,7 @@ export class BleService {
     if (!this.connected) throw new Error('Not connected');
 
     const buf = Buffer.alloc(4 + payload.length);
-    buf.writeUInt32BE(seq, 0); // first 4 bytes = sequence
+    buf.writeUInt32BE(seq, 0);
     Buffer.from(payload).copy(buf, 4);
 
     await this.connected.writeCharacteristicWithResponseForService(
@@ -158,7 +157,9 @@ export class BleService {
       buf.toString('base64'),
     );
 
-    console.log('[BLE] Chunk', seq, 'len', payload.length);
+    if (seq % 64 === 0) {
+      console.log('[BLE] chunk sent', seq);
+    }
   }
 
   /** Subscribe to STATUS notifications. */
