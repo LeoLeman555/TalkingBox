@@ -18,11 +18,13 @@ class TimeRead:
     def get_datetime(self):
         """returns date & time """
         # Read 7 bytes: sec, min, hour, day, date, month, year
-        data = self.i2c.readfrom_mem(self._DS3231_I2C_ADDR, 0x00, 7)
+        data = self.rtc.readfrom_mem(self._DS3231_I2C_ADDR, 0x00, 7)
         sec  = self.decode(data[0] & 0x7F)
         minute = self.decode(data[1])
         hour = self.decode(data[2] & 0x3F)
+        day_of_week = self.decode(data[3])
         day = self.decode(data[4])
         month = self.decode(data[5] & 0x1F)
         year = self.decode(data[6]) + 2000
-        return year, month, day, hour, minute, sec
+        print(year, month, day, day_of_week, hour, minute)
+        return year, month, day, day_of_week, hour, minute
