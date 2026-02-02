@@ -35,6 +35,9 @@ function isBlank(value: string | undefined | null): boolean {
   return !value || value.trim().length === 0;
 }
 
+/**
+ * Checks if a date is valid and respects calendar rules (YYYY-MM-DD).
+ */
 function isValidDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
     return false;
@@ -46,9 +49,8 @@ function isValidDate(value: string): boolean {
   const month = Number(monthStr);
   const day = Number(dayStr);
 
-  if (month < 1 || month > 12) {
-    return false;
-  }
+  if (!Number.isInteger(year) || year < 1970) return false;
+  if (month < 1 || month > 12) return false;
 
   const daysInMonth = getDaysInMonth(year, month);
 
@@ -67,13 +69,15 @@ function validateRecurrence(
 ): ReminderValidationError[] {
   const errors: ReminderValidationError[] = [];
 
-  if (recurrence.interval <= 0) {
+  /* interval */
+  if (!Number.isInteger(recurrence.interval) || recurrence.interval < 1) {
     errors.push({
       field: 'recurrence.interval',
-      message: 'Interval must be greater than 0.',
+      message: 'Interval must be an integer greater than or equal to 1.',
     });
   }
 
+  /* count / until exclusivity */
   const hasCount = recurrence.count != null;
   const hasUntil = recurrence.until != null;
 
@@ -84,30 +88,89 @@ function validateRecurrence(
     });
   }
 
-  if (recurrence.count != null && recurrence.count <= 0) {
-    errors.push({
-      field: 'recurrence.count',
-      message: 'count must be greater than 0.',
-    });
+  if (hasCount) {
+    if (!Number.isInteger(recurrence.count) || recurrence.count! <= 0) {
+      errors.push({
+        field: 'recurrence.count',
+        message: 'count must be a positive integer.',
+      });
+    }
   }
 
-  if (recurrence.until != null && !isValidDate(recurrence.until)) {
+  if (hasUntil && !isValidDate(recurrence.until!)) {
     errors.push({
       field: 'recurrence.until',
       message: 'until must be a valid date (YYYY-MM-DD).',
     });
   }
 
-  /**
-   * Guard rails for HOURLY recurrence.
-   */
-  if (recurrence.frequency === Frequency.HOURLY) {
-    if (!hasCount && !hasUntil) {
+  /* frequency-specific rules */
+  switch (recurrence.frequency) {
+    case Frequency.HOURLY:
+      if (!hasCount && !hasUntil) {
+        errors.push({
+          field: 'recurrence.frequency',
+          message: 'HOURLY recurrence requires a count or an until date.',
+        });
+      }
+      break;
+
+    case Frequency.WEEKLY:
+      if (
+        !recurrence.byWeekday ||
+        !Array.isArray(recurrence.byWeekday) ||
+        recurrence.byWeekday.length === 0
+      ) {
+        errors.push({
+          field: 'recurrence.byWeekday',
+          message: 'WEEKLY recurrence requires at least one weekday.',
+        });
+      } else {
+        for (const d of recurrence.byWeekday) {
+          if (!Number.isInteger(d) || d < 1 || d > 7) {
+            errors.push({
+              field: 'recurrence.byWeekday',
+              message: 'Weekday values must be integers between 1 (Monday) and 7 (Sunday).',
+            });
+            break;
+          }
+        }
+      }
+      break;
+
+    case Frequency.MONTHLY:
+      if (
+        !recurrence.byMonthDay ||
+        !Array.isArray(recurrence.byMonthDay) ||
+        recurrence.byMonthDay.length === 0
+      ) {
+        errors.push({
+          field: 'recurrence.byMonthDay',
+          message: 'MONTHLY recurrence requires at least one month day.',
+        });
+      } else {
+        for (const d of recurrence.byMonthDay) {
+          if (!Number.isInteger(d) || d < 1 || d > 31) {
+            errors.push({
+              field: 'recurrence.byMonthDay',
+              message: 'Month day values must be integers between 1 and 31.',
+            });
+            break;
+          }
+        }
+      }
+      break;
+
+    case Frequency.DAILY:
+    case Frequency.YEARLY:
+      /* nothing extra */
+      break;
+
+    default:
       errors.push({
         field: 'recurrence.frequency',
-        message: 'HOURLY recurrence requires a count or an until date.',
+        message: 'Unsupported recurrence frequency.',
       });
-    }
   }
 
   return errors;
@@ -168,6 +231,7 @@ export function doesReminderImpactMemos(
     previous.startDate !== next.startDate ||
     previous.time !== next.time ||
     previous.message !== next.message ||
-    JSON.stringify(previous.recurrence) !== JSON.stringify(next.recurrence)
+    JSON.stringify(previous.recurrence ?? null) !==
+      JSON.stringify(next.recurrence ?? null)
   );
 }

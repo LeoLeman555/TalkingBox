@@ -1,7 +1,8 @@
-import { Reminder, ReminderStatus, SyncStatus } from '../domain/reminder';
+import { Reminder, ReminderStatus, SyncStatus, RecurrenceRule } from '../domain/reminder';
 import {
   validateReminder,
   ReminderValidationError,
+  doesReminderImpactMemos,
 } from '../domain/reminderValidator';
 import {
   createReminder,
@@ -20,17 +21,24 @@ export interface CreateReminderInput {
   note?: string;
   startDate: string;
   time: string;
-  recurrence?: any; // validated later
+  recurrence?: RecurrenceRule;
 }
 
-export interface CreateReminderResult {
+/**
+ * Result returned by reminder services.
+ */
+export interface ReminderServiceResult {
   reminder?: Reminder;
   errors?: ReminderValidationError[];
 }
 
+/**
+ * UUID v4 generator without crypto dependency.
+ * Sufficient for app-level identifiers.
+ */
 function generateUuid(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-    const r = (Math.random() * 16) | 0;
+    const r = Math.floor(Math.random() * 16);
     const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
@@ -41,7 +49,7 @@ function generateUuid(): string {
  */
 export async function createReminderService(
   input: CreateReminderInput,
-): Promise<CreateReminderResult> {
+): Promise<ReminderServiceResult> {
   const now = new Date().toISOString();
 
   const reminder: Reminder = {
@@ -77,11 +85,12 @@ export async function createReminderService(
 
 /**
  * Updates an existing reminder.
+ * Handles revision and sync status properly.
  */
 export async function updateReminderService(
   reminderId: string,
   input: Partial<CreateReminderInput>,
-): Promise<CreateReminderResult> {
+): Promise<ReminderServiceResult> {
   const existing = await getReminderById(reminderId);
 
   if (!existing) {
@@ -90,17 +99,39 @@ export async function updateReminderService(
     };
   }
 
-  const updated: Reminder = {
+  const candidate: Reminder = {
     ...existing,
-    ...input,
+
+    category: input.category ?? existing.category,
+    title: input.title ?? existing.title,
+    message: input.message ?? existing.message,
+    note: input.note ?? existing.note,
+
+    startDate: input.startDate ?? existing.startDate,
+    time: input.time ?? existing.time,
+    recurrence:
+      input.recurrence !== undefined
+        ? input.recurrence
+        : existing.recurrence,
+
     updatedAt: new Date().toISOString(),
   };
 
-  const errors = validateReminder(updated);
+  const errors = validateReminder(candidate);
 
   if (errors.length > 0) {
     return { errors };
   }
+
+  const impactsMemos = doesReminderImpactMemos(existing, candidate);
+
+  const updated: Reminder = {
+    ...candidate,
+    revision: impactsMemos ? existing.revision + 1 : existing.revision,
+    syncStatus: impactsMemos
+      ? SyncStatus.NOT_SENT
+      : existing.syncStatus,
+  };
 
   await updateReminder(updated);
 

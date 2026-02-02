@@ -44,6 +44,18 @@ export interface RecurrenceRule {
   interval: number;
 
   /**
+   * Used only for WEEKLY recurrence.
+   * Values: 1 (Monday) → 7 (Sunday)
+   */
+  byWeekday?: number[];
+
+  /**
+   * Used only for MONTHLY recurrence.
+   * Values: 1 → 31
+   */
+  byMonthDay?: number[];
+
+  /**
    * Optional number of occurrences.
    * Mutually exclusive with until.
    */
