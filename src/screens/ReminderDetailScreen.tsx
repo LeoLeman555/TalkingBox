@@ -2,79 +2,121 @@ import React from 'react';
 import {
   View,
   Text,
-  FlatList,
   StyleSheet,
   useColorScheme,
+  ScrollView,
 } from 'react-native';
 
 import { Reminder } from '../domain/reminder';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { getColors } from '../theme/colors';
+import { formatDateHuman, formatRecurrenceHuman, formatSyncStatus } from '../utils/helpers';
 
 type Props = {
   reminder: Reminder;
   onBack: () => void;
 };
 
-type FieldItem = {
-  key: string;
-  label: string;
-  value: string | number | undefined | null;
-};
-
 export function ReminderDetailScreen({ reminder, onBack }: Props) {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
-  const fields: FieldItem[] = [
-    { key: 'id', label: 'ID', value: reminder.reminderId },
-    { key: 'title', label: 'Titre', value: reminder.title },
-    { key: 'message', label: 'Message', value: reminder.message },
-    { key: 'date', label: 'Date', value: reminder.startDate },
-    { key: 'time', label: 'Heure', value: reminder.time },
-    { key: 'category', label: 'Catégorie', value: reminder.category },
-    { key: 'status', label: 'Status', value: reminder.status },
-    { key: 'sync', label: 'SyncStatus', value: reminder.syncStatus },
-    { key: 'revision', label: 'Revision', value: reminder.revision },
-    { key: 'createdAt', label: 'CreatedAt', value: reminder.createdAt },
-    { key: 'updatedAt', label: 'UpdatedAt', value: reminder.updatedAt },
-  ];
-
-  const renderItem = ({ item }: { item: FieldItem }) => {
-    const value =
-      item.value === undefined || item.value === null || item.value === ''
-        ? '-'
-        : String(item.value);
-
-    return (
-      <View style={[styles.field, { borderColor: colors.inputBorder }]}>
-        <Text style={[styles.label, { color: colors.text }]}>{item.label}</Text>
-        <Text style={[styles.value, { color: colors.text }]}>{value}</Text>
-      </View>
-    );
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.header, { color: colors.text }]}>
-        Détail du reminder
-      </Text>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Title */}
+        <View style={styles.titleContainer}>
+          <Text style={[styles.title, { color: colors.text }]}>
+            {reminder.title}
+          </Text>
+          <View
+            style={[
+              styles.titleUnderline,
+              { backgroundColor: colors.accent },
+            ]}
+          />
+        </View>
 
-      <FlatList
-        data={fields}
-        keyExtractor={item => item.key}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-      />
 
+        {/* Date & Time */}
+        <View style={styles.metaRow}>
+          <Text style={[styles.metaText, { color: colors.text }]}>
+            {reminder.startDate}
+          </Text>
+          <Text style={[styles.metaSeparator, { color: colors.text }]}>•</Text>
+          <Text style={[styles.metaText, { color: colors.text }]}>
+            {reminder.time}
+          </Text>
+        </View>
+
+        {/* Recurrence */}
+        <View style={[styles.card, { borderColor: colors.inputBorder }]}>
+          <Text style={[styles.cardLabel, { color: colors.text }]}>
+            Répétition
+          </Text>
+          <Text style={[styles.cardValue, { color: colors.text }]}>
+            {reminder.recurrence
+              ? formatRecurrenceHuman(reminder.recurrence)
+              : 'Une seule fois'}
+          </Text>
+        </View>
+
+        {/* Message */}
+        <View style={[styles.card, { borderColor: colors.inputBorder }]}>
+          <Text style={[styles.cardLabel, { color: colors.text }]}>
+            Message
+          </Text>
+          <Text style={[styles.message, { color: colors.text }]}>
+            {reminder.message}
+          </Text>
+        </View>
+
+        {/* Secondary info */}
+        <View style={[styles.card, { borderColor: colors.inputBorder }]}>
+          <Text style={[styles.cardLabel, { color: colors.text }]}>
+            Informations
+          </Text>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>
+              Catégorie
+            </Text>
+            <Text style={[styles.infoValue, { color: colors.text }]}>
+              {reminder.category}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>
+              Synchronisation
+            </Text>
+            <Text style={[styles.infoValue, { color: colors.text }]}>
+              {formatSyncStatus(reminder.syncStatus)}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>
+              Créé le
+            </Text>
+            <Text style={[styles.infoValue, { color: colors.text }]}>
+              {formatDateHuman(reminder.createdAt)}
+            </Text>
+          </View>
+
+          <View style={styles.infoRow}>
+            <Text style={[styles.infoLabel, { color: colors.text }]}>
+              Modifié le
+            </Text>
+            <Text style={[styles.infoValue, { color: colors.text }]}>
+              {formatDateHuman(reminder.updatedAt)}
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      {/* Footer */}
       <View style={styles.footer}>
-        {/* <PrimaryButton
-          title="Modifier"
-          onPress={() => {}}
-          color={colors.accent}
-          textColor={colors.buttonText}
-        /> */}
-
         <PrimaryButton
           title="Retour"
           onPress={onBack}
@@ -87,39 +129,90 @@ export function ReminderDetailScreen({ reminder, onBack }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: { flex: 1 },
 
-  header: {
-    fontSize: 24,
-    fontWeight: '700',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-
-  listContent: {
+  content: {
+    padding: 20,
     paddingBottom: 10,
   },
 
-  field: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 10,
+  title: {
+    fontSize: 26,
+    fontWeight: '700',
+    marginBottom: 8,
+    textAlign: 'center',
   },
 
-  label: {
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+
+  metaText: {
+    fontSize: 25,
+    fontWeight: '500',
+  },
+
+  metaSeparator: {
+    marginHorizontal: 8,
+    opacity: 0.6,
+  },
+
+  card: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+
+  cardLabel: {
     fontSize: 13,
     fontWeight: '600',
     opacity: 0.7,
-    marginBottom: 4,
+    marginBottom: 8,
   },
 
-  value: {
+  cardValue: {
     fontSize: 16,
     fontWeight: '500',
   },
 
+  message: {
+    fontSize: 16,
+    lineHeight: 22,
+  },
+
+  infoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 6,
+  },
+
+  infoLabel: {
+    fontSize: 14,
+    opacity: 0.7,
+  },
+
+  infoValue: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+
   footer: {
-    marginTop: 10,
+    padding: 20,
+    paddingTop: 0,
+  },
+
+    titleContainer: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+
+  titleUnderline: {
+    height: 3,
+    width: 100,
+    borderRadius: 2,
   },
 });
