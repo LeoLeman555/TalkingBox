@@ -47,25 +47,25 @@ export interface RecurrenceRule {
    * Used only for WEEKLY recurrence.
    * Values: 1 (Monday) → 7 (Sunday)
    */
-  byWeekday?: number[];
+  byWeekday: number[];
 
   /**
    * Used only for MONTHLY recurrence.
    * Values: 1 → 31
    */
-  byMonthDay?: number[];
+  byMonthDay: number[];
 
   /**
    * Optional number of occurrences.
    * Mutually exclusive with until.
    */
-  count?: number | null;
+  count: number | null;
 
   /**
    * Optional end date (YYYY-MM-DD).
    * Mutually exclusive with count.
    */
-  until?: string | null;
+  until: string | null;
 }
 
 /**

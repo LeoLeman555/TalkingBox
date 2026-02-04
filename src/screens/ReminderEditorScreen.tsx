@@ -5,6 +5,8 @@ import {
   TextInput,
   StyleSheet,
   useColorScheme,
+  FlatList,
+  Switch, TouchableOpacity 
 } from 'react-native';
 
 import { PrimaryButton } from '../components/PrimaryButton';
@@ -14,7 +16,7 @@ import {
   validateReminder,
   ReminderValidationError,
 } from '../domain/reminderValidator';
-import { Reminder, ReminderStatus, SyncStatus } from '../domain/reminder';
+import { Reminder, ReminderStatus, RecurrenceRule, SyncStatus , Frequency} from '../domain/reminder';
 
 type Props = {
   onBack: () => void;
@@ -25,27 +27,31 @@ type FieldErrors = {
   message?: string;
   startDate?: string;
   time?: string;
+  recurrence?: string;
 };
+
+type RecurrenceUI = {
+  enabled: boolean;
+  frequency: Frequency;
+  interval: string;
+  byWeekday: number[];
+  byMonthDay: number[];
+};
+
 
 function mapValidationErrors(errors: ReminderValidationError[]): FieldErrors {
   const result: FieldErrors = {};
 
   for (const error of errors) {
-    switch (error.field) {
-      case 'title':
-        result.title = error.message;
-        break;
-      case 'message':
-        result.message = error.message;
-        break;
-      case 'startDate':
-        result.startDate = error.message;
-        break;
-      case 'time':
-        result.time = error.message;
-        break;
-      default:
-        break;
+    if (
+      error.field === 'title' ||
+      error.field === 'message' ||
+      error.field === 'startDate' ||
+      error.field === 'time'
+    ) {
+      result[error.field] = error.message;
+    } else if (error.field.startsWith('recurrence')) {
+      result.recurrence = error.message;
     }
   }
 
@@ -63,29 +69,71 @@ export function ReminderEditorScreen({ onBack }: Props) {
 
   const [errors, setErrors] = useState<FieldErrors>({});
 
+  const [recurrenceUI, setRecurrenceUI] = useState<RecurrenceUI>({
+  enabled: false,
+  frequency: Frequency.DAILY,
+  interval: '1',
+  byWeekday: [],
+  byMonthDay: [],
+  });
+
+  function buildRecurrence(): RecurrenceRule | undefined {
+    if (!recurrenceUI.enabled) {
+      return undefined;
+    }
+
+    const interval = Number(recurrenceUI.interval);
+
+    const base: RecurrenceRule = {
+      frequency: recurrenceUI.frequency,
+      interval,
+      count: null,
+      until: null,
+      byWeekday: [],
+      byMonthDay: [],
+    };
+
+    switch (recurrenceUI.frequency) {
+      case Frequency.WEEKLY:
+        return {
+          ...base,
+          byWeekday: recurrenceUI.byWeekday,
+        };
+
+      case Frequency.MONTHLY:
+        return {
+          ...base,
+          byMonthDay: recurrenceUI.byMonthDay,
+        };
+
+      default:
+        return base;
+    }
+  }
+
+
   const handleSave = async () => {
+    const recurrence = buildRecurrence();
+
     const draftReminder: Reminder = {
       reminderId: 'DRAFT',
       category: 'ACTIVITY',
       title,
       message,
-      note: '',
 
       startDate,
       time,
 
-      recurrence: undefined,
-
-      audioHash: '',
-      audioId: '',
+      recurrence,
 
       status: ReminderStatus.DRAFT,
       syncStatus: SyncStatus.NOT_SENT,
 
+      revision: 0,
       createdAt: '',
       updatedAt: '',
-      revision: 0,
     };
+
 
     const validationErrors = validateReminder(draftReminder);
     const mappedErrors = mapValidationErrors(validationErrors);
@@ -97,27 +145,23 @@ export function ReminderEditorScreen({ onBack }: Props) {
     }
 
     try {
-      const result = await createReminderService({
+      await createReminderService({
         category: 'ACTIVITY',
         title,
         message,
         startDate,
         time,
+        recurrence
       });
 
-      console.log('[REMINDER][CREATED]', result);
       onBack();
     } catch (e) {
       console.error('[REMINDER][ERROR]', e);
     }
   };
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>
-        Nouveau reminder
-      </Text>
-
+  const renderForm = () => (
+    <View>
       <Text style={[styles.label, { color: colors.text }]}>Titre</Text>
       <TextInput
         value={title}
@@ -162,7 +206,9 @@ export function ReminderEditorScreen({ onBack }: Props) {
           },
         ]}
       />
-      {errors.message && <Text style={styles.errorText}>{errors.message}</Text>}
+      {errors.message && (
+        <Text style={styles.errorText}>{errors.message}</Text>
+      )}
 
       <Text style={[styles.label, { color: colors.text }]}>
         Date (YYYY-MM-DD)
@@ -212,6 +258,181 @@ export function ReminderEditorScreen({ onBack }: Props) {
       />
       {errors.time && <Text style={styles.errorText}>{errors.time}</Text>}
 
+      <View style={styles.rowBetween}>
+        <Text style={[styles.label, { color: colors.text }]}>
+          Répétition
+        </Text>
+        <Switch
+          value={recurrenceUI.enabled}
+          onValueChange={enabled =>
+            setRecurrenceUI(prev => ({ ...prev, enabled }))
+          }
+        />
+      </View>
+      
+
+
+        {recurrenceUI.enabled && (
+          <>
+            <View
+              style={[
+                // styles.section,
+                styles.recurrenceBox,
+                {
+                  borderColor: errors.recurrence
+                    ? styles.errorBorder.borderColor
+                    : colors.inputBorder,
+                },
+              ]}
+            >
+            {/* Frequency selector */}
+            <Text style={[styles.label, { color: colors.text }]}>Fréquence</Text>
+            <View style={styles.segmented}>
+              {[Frequency.DAILY, Frequency.WEEKLY, Frequency.MONTHLY].map(freq => (
+                <TouchableOpacity
+                  key={freq}
+                  onPress={() =>
+                    setRecurrenceUI(prev => ({ ...prev, frequency: freq }))
+                  }
+                  style={[
+                    styles.segment,
+                    {
+                      backgroundColor:
+                        recurrenceUI.frequency === freq
+                          ? colors.accent
+                          : 'transparent',
+                      borderColor: colors.inputBorder,
+                    },
+                  ]}
+                >
+                  <Text style={{ color: colors.text }}>
+                    {freq}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Interval */}
+            <Text style={[styles.label, { color: colors.text }]}>
+              Intervalle
+            </Text>
+            <TextInput
+              value={recurrenceUI.interval}
+              keyboardType="numeric"
+              onChangeText={value =>
+                setRecurrenceUI(prev => ({ ...prev, interval: value }))
+              }
+              style={[
+                styles.input,
+                { borderColor: colors.inputBorder, color: colors.text },
+              ]}
+              placeholder="1"
+            />
+
+            {/* Weekly */}
+            {recurrenceUI.frequency === Frequency.WEEKLY && (
+              <>
+                <Text style={[styles.label, { color: colors.text }]}>
+                  Jours de la semaine
+                </Text>
+                <View style={styles.chips}>
+                  {[1, 2, 3, 4, 5, 6, 7].map(d => {
+                    const active = recurrenceUI.byWeekday.includes(d);
+                    return (
+                      <TouchableOpacity
+                        key={d}
+                        onPress={() =>
+                          setRecurrenceUI(prev => ({
+                            ...prev,
+                            byWeekday: active
+                              ? prev.byWeekday.filter(x => x !== d)
+                              : [...prev.byWeekday, d],
+                          }))
+                        }
+                        style={[
+                          styles.chip,
+                          {
+                            backgroundColor: active
+                              ? colors.accent
+                              : 'transparent',
+                            borderColor: colors.inputBorder,
+                          },
+                        ]}
+                      >
+                        <Text style={{ color: colors.text }}>{d}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            {/* Monthly */}
+            {recurrenceUI.frequency === Frequency.MONTHLY && (
+                <>
+                  <Text style={[styles.label, { color: colors.text }]}>
+                    Jours du mois
+                  </Text>
+
+                  <View style={styles.monthGrid}>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
+                      const active = recurrenceUI.byMonthDay.includes(day);
+
+                      return (
+                        <TouchableOpacity
+                          key={day}
+                          onPress={() =>
+                            setRecurrenceUI(prev => ({
+                              ...prev,
+                              byMonthDay: active
+                                ? prev.byMonthDay.filter(d => d !== day)
+                                : [...prev.byMonthDay, day],
+                            }))
+                          }
+                          style={[
+                            styles.dayChip,
+                            {
+                              backgroundColor: active
+                                ? colors.accent
+                                : 'transparent',
+                              borderColor: colors.inputBorder,
+                            },
+                          ]}
+                        >
+                          <Text style={{ color: colors.text }}>
+                            {day}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+            </View>
+          </>
+        )}
+
+      {errors.recurrence && (
+        <Text style={styles.errorText}>{errors.recurrence}</Text>
+      )}
+
+    </View>
+  );
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.text }]}>
+        Nouveau reminder
+      </Text>
+
+      <FlatList
+        data={[{ key: 'form' }]}
+        keyExtractor={item => item.key}
+        renderItem={renderForm}
+        contentContainerStyle={{ paddingBottom: 30 }}
+      />
+
       <PrimaryButton
         title="Enregistrer"
         onPress={handleSave}
@@ -234,7 +455,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
   },
   label: {
@@ -261,4 +482,59 @@ const styles = StyleSheet.create({
   errorBorder: {
     borderColor: 'red',
   },
+  section: {
+  marginTop: 20,
+  },
+  rowBetween: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  segmented: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  chips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  chip: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 10,
+  },
+  dayChip: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6,
+    marginBottom: 6,
+  },
+  recurrenceBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+  },
+
 });

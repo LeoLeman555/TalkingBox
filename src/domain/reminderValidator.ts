@@ -78,8 +78,8 @@ function validateRecurrence(
   }
 
   /* count / until exclusivity */
-  const hasCount = recurrence.count != null;
-  const hasUntil = recurrence.until != null;
+  const hasCount = recurrence.count !== null;
+  const hasUntil = recurrence.until !== null;
 
   if (hasCount && hasUntil) {
     errors.push({
@@ -90,10 +90,10 @@ function validateRecurrence(
 
   if (hasCount) {
     if (!Number.isInteger(recurrence.count) || recurrence.count! <= 0) {
-      errors.push({
-        field: 'recurrence.count',
-        message: 'count must be a positive integer.',
-      });
+    errors.push({
+      field: 'recurrence.count',
+      message: 'count must be a positive integer.',
+    });
     }
   }
 
@@ -101,6 +101,27 @@ function validateRecurrence(
     errors.push({
       field: 'recurrence.until',
       message: 'until must be a valid date (YYYY-MM-DD).',
+    });
+  }
+
+  /* cross-field exclusions */
+  if (
+    recurrence.frequency !== Frequency.WEEKLY &&
+    recurrence.byWeekday.length > 0
+  ) {
+    errors.push({
+      field: 'recurrence.byWeekday',
+      message: 'byWeekday is only allowed for WEEKLY recurrence.',
+    });
+  }
+
+  if (
+    recurrence.frequency !== Frequency.MONTHLY &&
+    recurrence.byMonthDay.length > 0
+  ) {
+    errors.push({
+      field: 'recurrence.byMonthDay',
+      message: 'byMonthDay is only allowed for MONTHLY recurrence.',
     });
   }
 
@@ -116,11 +137,7 @@ function validateRecurrence(
       break;
 
     case Frequency.WEEKLY:
-      if (
-        !recurrence.byWeekday ||
-        !Array.isArray(recurrence.byWeekday) ||
-        recurrence.byWeekday.length === 0
-      ) {
+      if (recurrence.byWeekday.length === 0) {
         errors.push({
           field: 'recurrence.byWeekday',
           message: 'WEEKLY recurrence requires at least one weekday.',
@@ -130,7 +147,8 @@ function validateRecurrence(
           if (!Number.isInteger(d) || d < 1 || d > 7) {
             errors.push({
               field: 'recurrence.byWeekday',
-              message: 'Weekday values must be integers between 1 (Monday) and 7 (Sunday).',
+              message:
+                'Weekday values must be integers between 1 (Monday) and 7 (Sunday).',
             });
             break;
           }
@@ -139,11 +157,7 @@ function validateRecurrence(
       break;
 
     case Frequency.MONTHLY:
-      if (
-        !recurrence.byMonthDay ||
-        !Array.isArray(recurrence.byMonthDay) ||
-        recurrence.byMonthDay.length === 0
-      ) {
+      if (recurrence.byMonthDay.length === 0) {
         errors.push({
           field: 'recurrence.byMonthDay',
           message: 'MONTHLY recurrence requires at least one month day.',
@@ -153,7 +167,8 @@ function validateRecurrence(
           if (!Number.isInteger(d) || d < 1 || d > 31) {
             errors.push({
               field: 'recurrence.byMonthDay',
-              message: 'Month day values must be integers between 1 and 31.',
+              message:
+                'Month day values must be integers between 1 and 31.',
             });
             break;
           }
@@ -231,7 +246,7 @@ export function doesReminderImpactMemos(
     previous.startDate !== next.startDate ||
     previous.time !== next.time ||
     previous.message !== next.message ||
-    JSON.stringify(previous.recurrence ?? null) !==
-      JSON.stringify(next.recurrence ?? null)
+    JSON.stringify(previous.recurrence) !==
+      JSON.stringify(next.recurrence)
   );
 }
