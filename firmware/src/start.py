@@ -31,13 +31,18 @@ class Button:
 class Controller:
     """High-level user interaction controller."""
 
-    def __init__(self, audio: AudioPlayer):
+    def __init__(self, audio: AudioPlayer, storage: Storage):
         self.audio = audio
-        self.track = "/sd/mp3/received.wav"
+        self.storage = storage
+        self.track = "{}/audio/received.wav".format(storage.root)
 
     def on_button_pressed(self):
+        if not self.audio or not self.audio.available:
+            print("[CTRL] Audio unavailable")
+            return
+
         if not self.audio.is_playing():
-            print("[CTRL] Button pressed -> play", self.track)
+            print("[CTRL] Play", self.track)
             _thread.start_new_thread(
                 self.audio.play_wav,
                 (self.track,)
@@ -45,11 +50,10 @@ class Controller:
             return
 
         if self.audio.is_paused():
-            print("[CTRL] Resume")
             self.audio.resume()
         else:
-            print("[CTRL] Pause")
             self.audio.pause()
+
 
 
 def main():
@@ -57,26 +61,31 @@ def main():
     print("[START] Talking Box firmware booting")
 
     storage = Storage()
-    audio = AudioPlayer()
+
+    try:
+        audio = AudioPlayer()
+    except Exception as e:
+        print("[START] Audio disabled:", e)
+        audio = None
+
     ble = BleService(storage)
 
-    print("[START] All modules are ready")
-
-    controller = Controller(audio)
-    button = Button(
-        pin=15,
-        callback=controller.on_button_pressed
-    )
+    controller = Controller(audio, storage)
+    button = Button(pin=15, callback=controller.on_button_pressed)
 
     print("[START] Ready")
 
     while True:
         button.poll()
+
         if ble.end_requested:
             ble.end_requested = False
-            ble.finalize_file()
-        time.sleep(0.05)
+            try:
+                ble.finalize_file()
+            except Exception as e:
+                print("[START] Finalize failed:", e)
 
+        time.sleep(0.05)
 
 if __name__ == "__main__":
     main()
