@@ -6,8 +6,13 @@ import {
   StyleSheet,
   useColorScheme,
   FlatList,
-  Switch, TouchableOpacity 
+  Switch, 
+  TouchableOpacity,
+  Platform
 } from 'react-native';
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { getColors } from '../theme/colors';
@@ -17,6 +22,7 @@ import {
   ReminderValidationError,
 } from '../domain/reminderValidator';
 import { Reminder, ReminderStatus, RecurrenceRule, SyncStatus , Frequency} from '../domain/reminder';
+import { formatDate, formatTime } from '../utils/helpers';
 
 type Props = {
   onBack: () => void;
@@ -67,6 +73,10 @@ export function ReminderEditorScreen({ onBack }: Props) {
   const [startDate, setStartDate] = useState('2026-01-01');
   const [time, setTime] = useState('08:30');
 
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
+
+
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const [recurrenceUI, setRecurrenceUI] = useState<RecurrenceUI>({
@@ -76,6 +86,35 @@ export function ReminderEditorScreen({ onBack }: Props) {
   byWeekday: [],
   byMonthDay: [],
   });
+
+  function onDateChange(
+    _: DateTimePickerEvent,
+    selected?: Date,
+  ) {
+    setShowDatePicker(false);
+
+    if (selected) {
+      setStartDate(formatDate(selected));
+      if (errors.startDate) {
+        setErrors(prev => ({ ...prev, startDate: undefined }));
+      }
+    }
+  }
+
+  function onTimeChange(
+    _: DateTimePickerEvent,
+    selected?: Date,
+  ) {
+    setShowTimePicker(false);
+
+    if (selected) {
+      setTime(formatTime(selected));
+      if (errors.time) {
+        setErrors(prev => ({ ...prev, time: undefined }));
+      }
+    }
+  }
+
 
   function buildRecurrence(): RecurrenceRule | undefined {
     if (!recurrenceUI.enabled) {
@@ -211,52 +250,73 @@ export function ReminderEditorScreen({ onBack }: Props) {
       )}
 
       <Text style={[styles.label, { color: colors.text }]}>
-        Date (YYYY-MM-DD)
+        Date
       </Text>
-      <TextInput
-        value={startDate}
-        onChangeText={value => {
-          setStartDate(value);
-          if (errors.startDate) {
-            setErrors(prev => ({ ...prev, startDate: undefined }));
-          }
-        }}
-        placeholder="YYYY-MM-DD"
+
+      <TouchableOpacity
+        onPress={() => setShowDatePicker(true)}
         style={[
           styles.input,
           {
+            justifyContent: 'center',
             borderColor: errors.startDate
               ? styles.errorBorder.borderColor
               : colors.inputBorder,
-            color: colors.text,
           },
         ]}
-      />
+      >
+        <Text style={{ color: colors.text }}>
+          {startDate}
+        </Text>
+      </TouchableOpacity>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={new Date(startDate)}
+          mode="date"
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onDateChange}
+        />
+      )}
+
       {errors.startDate && (
         <Text style={styles.errorText}>{errors.startDate}</Text>
       )}
 
-      <Text style={[styles.label, { color: colors.text }]}>Heure (HH:MM)</Text>
-      <TextInput
-        value={time}
-        onChangeText={value => {
-          setTime(value);
-          if (errors.time) {
-            setErrors(prev => ({ ...prev, time: undefined }));
-          }
-        }}
-        placeholder="HH:MM"
+      <Text style={[styles.label, { color: colors.text }]}>
+        Heure
+      </Text>
+
+      <TouchableOpacity
+        onPress={() => setShowTimePicker(true)}
         style={[
           styles.input,
           {
+            justifyContent: 'center',
             borderColor: errors.time
               ? styles.errorBorder.borderColor
               : colors.inputBorder,
-            color: colors.text,
           },
         ]}
-      />
-      {errors.time && <Text style={styles.errorText}>{errors.time}</Text>}
+      >
+        <Text style={{ color: colors.text }}>
+          {time}
+        </Text>
+      </TouchableOpacity>
+
+      {showTimePicker && (
+        <DateTimePicker
+          value={new Date(`1970-01-01T${time}:00`)}
+          mode="time"
+          is24Hour
+          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          onChange={onTimeChange}
+        />
+      )}
+
+      {errors.time && (
+        <Text style={styles.errorText}>{errors.time}</Text>
+      )}
 
       <View style={styles.rowBetween}>
         <Text style={[styles.label, { color: colors.text }]}>
