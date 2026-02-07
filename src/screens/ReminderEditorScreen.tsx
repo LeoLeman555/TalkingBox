@@ -42,6 +42,10 @@ type RecurrenceUI = {
   interval: string;
   byWeekday: number[];
   byMonthDay: number[];
+
+  endMode: 'NEVER' | 'UNTIL' | 'COUNT';
+  until?: string;
+  count?: string;
 };
 
 
@@ -76,6 +80,7 @@ export function ReminderEditorScreen({ onBack }: Props) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
+  const [showUntilPicker, setShowUntilPicker] = useState(false);
 
   const [errors, setErrors] = useState<FieldErrors>({});
 
@@ -85,6 +90,10 @@ export function ReminderEditorScreen({ onBack }: Props) {
   interval: '1',
   byWeekday: [],
   byMonthDay: [],
+
+  endMode: 'NEVER',
+  until: undefined,
+  count: undefined,
   });
 
   function onDateChange(
@@ -122,6 +131,9 @@ export function ReminderEditorScreen({ onBack }: Props) {
     }
 
     const interval = Number(recurrenceUI.interval);
+    if (!Number.isInteger(interval) || interval < 1) {
+      return undefined;
+    }
 
     const base: RecurrenceRule = {
       frequency: recurrenceUI.frequency,
@@ -132,23 +144,30 @@ export function ReminderEditorScreen({ onBack }: Props) {
       byMonthDay: [],
     };
 
+    if (recurrenceUI.endMode === 'COUNT') {
+      const count = Number(recurrenceUI.count);
+      if (Number.isInteger(count) && count > 0) {
+        base.count = count;
+      }
+    }
+
+    if (recurrenceUI.endMode === 'UNTIL' && recurrenceUI.until) {
+      base.until = recurrenceUI.until;
+    }
+
     switch (recurrenceUI.frequency) {
       case Frequency.WEEKLY:
-        return {
-          ...base,
-          byWeekday: recurrenceUI.byWeekday,
-        };
+        base.byWeekday = recurrenceUI.byWeekday;
+        break;
 
       case Frequency.MONTHLY:
-        return {
-          ...base,
-          byMonthDay: recurrenceUI.byMonthDay,
-        };
-
-      default:
-        return base;
+        base.byMonthDay = recurrenceUI.byMonthDay;
+        break;
     }
+
+    return base;
   }
+
 
 
   const handleSave = async () => {
@@ -469,6 +488,113 @@ export function ReminderEditorScreen({ onBack }: Props) {
                 </>
               )}
 
+
+            <Text style={[styles.label, { color: colors.text }]}>
+                Arrêt de la répétition
+              </Text>
+
+              <View style={styles.segmented}>
+                {[
+                  { key: 'NEVER', label: 'Jamais' },
+                  { key: 'UNTIL', label: 'Jusqu’à une date' },
+                  { key: 'COUNT', label: 'Après X fois' },
+                ].map(opt => (
+                  <TouchableOpacity
+                  key={opt.key}
+                    onPress={() =>
+                      setRecurrenceUI(prev => ({
+                        ...prev,
+                        endMode: opt.key as RecurrenceUI['endMode'],
+                        until: undefined,
+                        count: undefined,
+                      }))
+                    }
+                    style={[
+                      styles.segment,
+                      {
+                        backgroundColor:
+                          recurrenceUI.endMode === opt.key
+                            ? colors.accent
+                            : 'transparent',
+                        borderColor: colors.inputBorder,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: colors.text }}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+
+              {recurrenceUI.endMode === 'UNTIL' && (
+                <>
+                  <Text style={[styles.label, { color: colors.text }]}>
+                    Date de fin
+                  </Text>
+
+                  <TouchableOpacity
+                    onPress={() => setShowUntilPicker(true)}
+                    style={[
+                      styles.input,
+                      {
+                        justifyContent: 'center',
+                        borderColor: colors.inputBorder,
+                      },
+                    ]}
+                  >
+                    <Text style={{ color: colors.text }}>
+                      {recurrenceUI.until ?? 'Choisir une date'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {showUntilPicker && (
+                    <DateTimePicker
+                      value={
+                        recurrenceUI.until
+                          ? new Date(recurrenceUI.until)
+                          : new Date()
+                      }
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={(_, date) => {
+                        setShowUntilPicker(false);
+                        if (date) {
+                          setRecurrenceUI(prev => ({
+                            ...prev,
+                            until: formatDate(date),
+                          }));
+                        }
+                      }}
+                    />
+                  )}
+                </>
+              )}
+
+              {recurrenceUI.endMode === 'COUNT' && (
+                <>
+                  <Text style={[styles.label, { color: colors.text }]}>
+                    Nombre d’occurrences
+                  </Text>
+
+                  <TextInput
+                    value={recurrenceUI.count ?? ''}
+                    keyboardType="numeric"
+                    onChangeText={value =>
+                      setRecurrenceUI(prev => ({
+                        ...prev,
+                        count: value,
+                      }))
+                    }
+                    placeholder="Ex: 10"
+                    style={[
+                      styles.input,
+                      { borderColor: colors.inputBorder, color: colors.text },
+                    ]}
+                  />
+                </>
+              )}
+
+
             </View>
           </>
         )}
@@ -476,6 +602,7 @@ export function ReminderEditorScreen({ onBack }: Props) {
       {errors.recurrence && (
         <Text style={styles.errorText}>{errors.recurrence}</Text>
       )}
+
 
     </View>
   );
