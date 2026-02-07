@@ -10,7 +10,8 @@ import {
 import { Reminder } from '../domain/reminder';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { getColors } from '../theme/colors';
-import { formatDateHuman, formatRecurrenceHuman, formatSyncStatus } from '../utils/helpers';
+import { formatDateHuman } from '../utils/dateFormat';
+import { formatRecurrenceHuman, formatSyncStatus } from '../utils/recurrenceFormat';
 
 type Props = {
   reminder: Reminder;
