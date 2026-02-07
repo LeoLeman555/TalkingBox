@@ -7,6 +7,7 @@ export function getColors(scheme: string | null) {
     buttonText: '#FFF',
     mock: '#434547ff',
     accent: '#009688',
-    error: '#ff6607ff',
+    warning: '#ff6607ff',
+    error: '#ff0000'
   };
 }

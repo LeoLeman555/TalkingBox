@@ -10,6 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@react-native-community/datetimepicker": "^8.6.0",
     "@react-native/new-app-screen": "0.82.1",
     "buffer": "^6.0.3",
     "crypto-js": "^4.2.0",
