@@ -1,24 +1,41 @@
 // services/generateReminderAudio.ts
+import RNFS from 'react-native-fs';
+import { TtsService } from '../services/TtsService';
 import { computeAudioHash } from '../utils/audioHash';
-import { ensureTtsDir } from '../utils/ttsFileSystem';
-import { TtsService } from './TtsService';
 
+const TTS_DIR = `${RNFS.DocumentDirectoryPath}/tts`;
+
+export interface GeneratedAudio {
+  audioHash: string;
+  audioFile: string;
+}
+
+/**
+ * Generate (or reuse) a TTS audio file for a reminder message.
+ */
 export async function generateReminderAudio(
   message: string,
-): Promise<{ audioHash: string; audioFile: string }> {
-  if (!message || !message.trim()) {
-    throw new Error('[AUDIO] Message is empty');
+): Promise<GeneratedAudio> {
+  if (!message || message.trim().length === 0) {
+    throw new Error('[AUDIO][INVALID_MESSAGE]');
   }
 
   const audioHash = computeAudioHash(message);
   const audioFile = `${audioHash}.wav`;
+  const audioPath = `${TTS_DIR}/${audioFile}`;
 
-  await ensureTtsDir();
+  const exists = await RNFS.exists(audioPath);
+  if (exists) {
+    return { audioHash, audioFile };
+  }
 
-  await TtsService.generate(message, audioFile);
+  await RNFS.mkdir(TTS_DIR);
 
-  return {
-    audioHash,
-    audioFile,
-  };
+  const ttsResult = await TtsService.generate(message, audioFile);
+
+  if (ttsResult.path !== audioPath) {
+    await RNFS.moveFile(ttsResult.path, audioPath);
+  }
+
+  return { audioHash, audioFile };
 }

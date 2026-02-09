@@ -121,12 +121,13 @@ export interface Reminder {
   /**
    * Deterministic hash of the audio content.
    */
-  audioHash?: string;
+  audioHash: string;
 
   /**
-   * Reference to the generated audio asset.
+   * Stable reference to the audio file sent to the ESP.
+   * Derived from audioHash (ex: "<hash>.mp3").
    */
-  audioId?: string;
+  audioFile: string;
 
   /**
    * Business status.

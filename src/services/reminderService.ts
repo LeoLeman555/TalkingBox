@@ -9,6 +9,7 @@ import {
   updateReminder,
   getReminderById,
 } from '../storage/reminderRepository';
+import { generateReminderAudio } from '../services/generateReminderAudio';
 
 /**
  * Raw input coming from the UI.
@@ -52,6 +53,20 @@ export async function createReminderService(
 ): Promise<ReminderServiceResult> {
   const now = new Date().toISOString();
 
+  let audioHash: string;
+  let audioFile: string;
+
+  try {
+    const audio = await generateReminderAudio(input.message);
+    audioHash = audio.audioHash;
+    audioFile = audio.audioFile;
+  } catch (error) {
+  console.error('[REMINDER][AUDIO_GENERATION_FAILED]', error);
+  return {
+    errors: [{ field: 'message', message: 'Failed to generate audio.' }],
+  };
+}
+
   const reminder: Reminder = {
     reminderId: generateUuid(),
 
@@ -63,6 +78,9 @@ export async function createReminderService(
     startDate: input.startDate,
     time: input.time,
     recurrence: input.recurrence,
+
+    audioHash,
+    audioFile,
 
     status: ReminderStatus.VALID,
     syncStatus: SyncStatus.NOT_SENT,
