@@ -31,7 +31,7 @@ def main():
 
     button = Button(
         pin=15,
-        callback=rtc.get_datetime
+        callback=print(rtc.get_datetime)
     )
 
     print("[START] Ready")
