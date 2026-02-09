@@ -1,23 +1,19 @@
 import React, { useState } from 'react';
 import {
-  TextInput,
   Text,
   StyleSheet,
   useColorScheme,
   View,
   Alert,
 } from 'react-native';
-import RNFS from 'react-native-fs';
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ProgressBar } from '../components/ProgressBar';
 import { DeviceInfo } from '../components/DeviceInfo';
 import { useBlePermissions } from '../hooks/useBlePermissions';
 import { BleService, BleDeviceInfo } from '../services/BleService';
-import { TtsService } from '../services/TtsService';
 import { sendFileViaBle } from '../services/ble/sendFileViaBle';
 import { getColors } from '../theme/colors';
-import { generateReminderAudio } from '../services/generateReminderAudio';
 
 const ble = new BleService();
 
@@ -31,7 +27,6 @@ type Props = {
 
 export function MainScreen({
   selectedTtsPath,
-  onSelectTts,
   onOpenFiles,
   onCreateReminder,
   onViewReminders,
@@ -41,54 +36,9 @@ export function MainScreen({
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
-  const [text, setText] = useState('');
   const [state, setState] = useState('NOT CONNECTED');
   const [progress, setProgress] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
-
-  const handleGenerateTTS = async () => {
-    if (!text.trim()) {
-      Alert.alert('Invalid message', 'Message vide');
-      return;
-    }
-
-    try {
-      const { audioHash, audioFile } =
-        await generateReminderAudio(text);
-
-      const fullPath = `${RNFS.DocumentDirectoryPath}/tts/${audioFile}`;
-
-      console.log('[TTS][APP][OK]', audioHash, audioFile);
-
-      onSelectTts(fullPath);
-
-      Alert.alert(
-        'Audio généré',
-        `hash: ${audioHash.substring(0, 8)}…`,
-      );
-    } catch (e) {
-      console.error('[TTS][APP][ERROR]', e);
-      Alert.alert('Erreur TTS', 'Échec génération audio');
-    }
-  };
-
-
-  const playTts = async (): Promise<void> => {
-    if (!selectedTtsPath) {
-      Alert.alert(
-        'No audio selected',
-        'Please generate or select a TTS file before playing.',
-      );
-      return;
-    }
-
-    try {
-      console.log('[TTS][APP][PLAY][path=' + selectedTtsPath + ']');
-      await TtsService.play(selectedTtsPath);
-    } catch (e) {
-      console.error('[TTS][APP][PLAY_ERROR]', e);
-    }
-  };
 
   const handleRealBle = async () => {
     setProgress(0);
@@ -122,13 +72,13 @@ export function MainScreen({
   };
 
   const handleSendBleFile = async () => {
-        if (!selectedTtsPath) {
+    if (!selectedTtsPath) {
       Alert.alert('No file', 'No TTS file selected.');
       return;
     }
 
     try {
-            await sendFileViaBle({
+      await sendFileViaBle({
         ble: ble,
         filePath: selectedTtsPath,
         setProgress,
@@ -137,7 +87,7 @@ export function MainScreen({
     } catch (e) {
       console.error('[BLE FILE][ERROR]', e);
       setState('ERROR');
-        }
+    }
   };
 
   return (
@@ -146,41 +96,8 @@ export function MainScreen({
         Talking Box — Prototype
       </Text>
 
-      <Text style={[styles.label, { color: colors.text }]}>Message</Text>
-
-      <TextInput
-        value={text}
-        onChangeText={setText}
-        placeholder="Saisir un message"
-        style={[
-          styles.input,
-          { borderColor: colors.inputBorder, color: colors.text },
-        ]}
-      />
-
       <PrimaryButton
-        title="Générer TTS (WAV)"
-        onPress={handleGenerateTTS}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
-
-      <PrimaryButton
-        title="Lire TTS"
-        onPress={playTts}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
-
-      <PrimaryButton
-        title="Fichiers TTS"
-        onPress={onOpenFiles}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
-
-      <PrimaryButton
-        title="Créer reminder"
+        title="Créer un reminder"
         onPress={onCreateReminder}
         color={colors.accent}
         textColor={colors.buttonText}
@@ -189,6 +106,13 @@ export function MainScreen({
       <PrimaryButton
         title="Voir les reminders"
         onPress={onViewReminders}
+        color={colors.accent}
+        textColor={colors.buttonText}
+      />
+
+      <PrimaryButton
+        title="Fichiers audio (TTS)"
+        onPress={onOpenFiles}
         color={colors.accent}
         textColor={colors.buttonText}
       />
@@ -216,7 +140,7 @@ export function MainScreen({
       </Text>
 
       <PrimaryButton
-        title="Envoyer audio via BLE"
+        title="Envoyer audio sélectionné via BLE"
         onPress={handleSendBleFile}
         color={colors.accent}
         textColor={colors.buttonText}
@@ -232,18 +156,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 20,
     textAlign: 'center',
-  },
-  input: {
-    borderWidth: 1,
-    padding: 14,
-    borderRadius: 8,
-    fontSize: 16,
-    marginBottom: 12,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
   },
   info: {
     marginTop: 6,
