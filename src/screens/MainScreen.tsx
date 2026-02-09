@@ -7,16 +7,17 @@ import {
   View,
   Alert,
 } from 'react-native';
+import RNFS from 'react-native-fs';
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ProgressBar } from '../components/ProgressBar';
 import { DeviceInfo } from '../components/DeviceInfo';
 import { useBlePermissions } from '../hooks/useBlePermissions';
 import { BleService, BleDeviceInfo } from '../services/BleService';
-import { TtsService, TtsAudioResult } from '../services/TtsService';
+import { TtsService } from '../services/TtsService';
 import { sendFileViaBle } from '../services/ble/sendFileViaBle';
 import { getColors } from '../theme/colors';
-import { generateTtsFilename } from '../utils/TtsFileSystem';
+import { generateReminderAudio } from '../services/generateReminderAudio';
 
 const ble = new BleService();
 
@@ -47,42 +48,30 @@ export function MainScreen({
 
   const handleGenerateTTS = async () => {
     if (!text.trim()) {
-      Alert.alert(
-        'Invalid message',
-        'Please enter a message before generating audio.',
-      );
+      Alert.alert('Invalid message', 'Message vide');
       return;
     }
 
     try {
-      const filename = generateTtsFilename('.wav'); // MP3 or WAV
-      console.log('[TTS][APP][START][filename=' + filename + ']');
+      const { audioHash, audioFile } =
+        await generateReminderAudio(text);
 
-      const tts: TtsAudioResult = await TtsService.generate(text, filename);
+      const fullPath = `${RNFS.DocumentDirectoryPath}/tts/${audioFile}`;
 
-      // if (tts.format !== 'wav') {
-      //   Alert.alert(
-      //     'Audio incompatible',
-      //     'Generated audio is not WAV and cannot be sent to the device.',
-      //   );
-      //   return;
-      // }
+      console.log('[TTS][APP][OK]', audioHash, audioFile);
 
-      console.log('[TTS][APP][GENERATED][path=' + tts.path + ']');
-      onSelectTts(tts.path);
-
-      const uri = await TtsService.exportToMusic(tts.path, filename);
-      console.log('[TTS][APP][EXPORTED][uri=' + uri + ']');
+      onSelectTts(fullPath);
 
       Alert.alert(
-        'TTS Generated',
-        'Audio file generated successfully.',
+        'Audio généré',
+        `hash: ${audioHash.substring(0, 8)}…`,
       );
     } catch (e) {
       console.error('[TTS][APP][ERROR]', e);
-      Alert.alert('TTS Error', 'Failed to generate audio.');
+      Alert.alert('Erreur TTS', 'Échec génération audio');
     }
   };
+
 
   const playTts = async (): Promise<void> => {
     if (!selectedTtsPath) {
@@ -133,13 +122,13 @@ export function MainScreen({
   };
 
   const handleSendBleFile = async () => {
-    if (!selectedTtsPath) {
+        if (!selectedTtsPath) {
       Alert.alert('No file', 'No TTS file selected.');
       return;
     }
 
     try {
-      await sendFileViaBle({
+            await sendFileViaBle({
         ble: ble,
         filePath: selectedTtsPath,
         setProgress,
@@ -148,7 +137,7 @@ export function MainScreen({
     } catch (e) {
       console.error('[BLE FILE][ERROR]', e);
       setState('ERROR');
-    }
+        }
   };
 
   return (
