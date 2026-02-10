@@ -15,7 +15,6 @@ export async function sendFileViaBle({
   setProgress,
   setState,
 }: SendFileContext): Promise<void> {
-  let sub: any = null;
   let mounted = true;
   let doneOrFailed = false;
 
@@ -39,7 +38,11 @@ export async function sendFileViaBle({
     let done = false;
     let failed = false;
 
-    sub = await ble.subscribeStatus(msg => {
+    // NOTE: Do not manually cancel BLE monitors on Android.
+    // react-native-ble-plx may crash when cancelTransaction is called
+    // while notifications are still being dispatched.
+
+    await ble.subscribeStatus(msg => {
       if (!mounted || doneOrFailed) return;
       console.log('[STATUS MSG]', msg);
 
@@ -62,7 +65,6 @@ export async function sendFileViaBle({
           doneOrFailed = true;
           setProgress(100);
           setState('DONE');
-          sub?.remove();
           break;
 
         case 'timeout':
@@ -74,7 +76,6 @@ export async function sendFileViaBle({
           failed = true;
           doneOrFailed = true;
           setState('ERROR');
-          sub?.remove();
           break;
       }
     });
@@ -112,10 +113,7 @@ export async function sendFileViaBle({
       await delay(50);
     }
     console.log('[BLE FILE] Transfer completed successfully');
-  } finally {
+    } finally {
     mounted = false;
-    try {
-      sub?.remove();
-    } catch {}
   }
 }

@@ -172,7 +172,12 @@ export class BleService {
       SERVICE_UUID,
       CHAR_STATUS,
       (err, char) => {
-        if (err || !char?.value) return;
+        if (err) {
+        console.log('[BLE] STATUS error:', err.message);
+        return;
+      }
+      if (!char?.value) return;
+
 
         try {
           const json = Buffer.from(char.value, 'base64').toString('utf8');
