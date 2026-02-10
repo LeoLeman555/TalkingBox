@@ -44,6 +44,7 @@ export function MainScreen({
   const [state, setState] = useState('NOT CONNECTED');
   const [progress, setProgress] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
+  const [sending, setSending] = useState(false);
 
   const handleGenerateTTS = async () => {
     if (!text.trim()) {
@@ -132,13 +133,16 @@ export function MainScreen({
     }
   };
 
-  const handleSendBleFile = async () => {
+    const handleSendBleFile = async () => {
+    if (sending) return;
+    
     if (!selectedTtsPath) {
       Alert.alert('No file', 'No TTS file selected.');
       return;
     }
 
     try {
+      setSending(true);
       await sendFileViaBle({
         ble: ble,
         filePath: selectedTtsPath,
@@ -148,6 +152,8 @@ export function MainScreen({
     } catch (e) {
       console.error('[BLE FILE][ERROR]', e);
       setState('ERROR');
+    } finally {
+    setSending(false);
     }
   };
 
