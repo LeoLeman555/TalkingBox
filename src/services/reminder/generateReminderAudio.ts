@@ -1,7 +1,7 @@
 // services/generateReminderAudio.ts
 import RNFS from 'react-native-fs';
-import { TtsService } from '../services/TtsService';
-import { computeAudioHash } from '../utils/audioHash';
+import { TtsService } from '../TtsService';
+import { computeAudioHash } from '../../utils/audioHash';
 
 const TTS_DIR = `${RNFS.DocumentDirectoryPath}/tts`;
 

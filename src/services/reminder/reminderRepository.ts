@@ -1,5 +1,5 @@
 import RNFS from 'react-native-fs';
-import { Reminder } from '../domain/reminder';
+import { Reminder } from '../../domain/reminder';
 
 /**
  * Internal structure of the reminders storage file.
@@ -157,4 +157,11 @@ export async function deleteReminder(reminderId: string): Promise<void> {
   }
 
   await saveStorage(storage);
+}
+
+export async function getRemindersByAudioHash(
+  audioHash: string,
+): Promise<Reminder[]> {
+  const reminders = await getAllReminders();
+  return reminders.filter(r => r.audioHash === audioHash);
 }

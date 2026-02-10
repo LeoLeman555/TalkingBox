@@ -12,6 +12,7 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { getColors } from '../theme/colors';
 import { formatDateHuman } from '../utils/dateFormat';
 import { formatRecurrenceHuman, formatSyncStatus } from '../utils/recurrenceFormat';
+import { deleteReminderService } from '../services/reminder/reminderDeletionService';
 import RNFS from 'react-native-fs';
 import { Alert } from 'react-native';
 import { TtsService } from '../services/TtsService';
@@ -25,6 +26,33 @@ type Props = {
 export function ReminderDetailScreen({ reminder, onBack }: Props) {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
+
+  const handleDeleteReminder = (): void => {
+    Alert.alert(
+      'Supprimer le reminder',
+      'Cette action est définitive.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteReminderService(reminder.reminderId);
+              onBack();
+            } catch (error) {
+              console.error('[REMINDER][DELETE_ERROR]', error);
+              Alert.alert(
+                'Erreur',
+                'Impossible de supprimer le reminder.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
 
   const handlePlayAudio = async (): Promise<void> => {
     if (!reminder.audioFile) {
@@ -156,6 +184,13 @@ export function ReminderDetailScreen({ reminder, onBack }: Props) {
 
       {/* Footer */}
       <View style={styles.footer}>
+        <PrimaryButton
+          title="Supprimer"
+          onPress={handleDeleteReminder}
+          color={colors.warning}
+          textColor={colors.buttonText}
+        />
+
         <PrimaryButton
           title="Retour"
           onPress={onBack}

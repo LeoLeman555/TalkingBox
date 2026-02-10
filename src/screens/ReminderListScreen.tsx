@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, StyleSheet, useColorScheme, TouchableOpacity } from 'react-native';
 
 import { getColors } from '../theme/colors';
-import { getAllReminders } from '../storage/reminderRepository';
+import { getAllReminders } from '../services/reminder/reminderRepository';
 import { Reminder } from '../domain/reminder';
 import { PrimaryButton } from '../components/PrimaryButton';
 

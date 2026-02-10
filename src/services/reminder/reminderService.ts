@@ -1,15 +1,15 @@
-import { Reminder, ReminderStatus, SyncStatus, RecurrenceRule } from '../domain/reminder';
+import { Reminder, ReminderStatus, SyncStatus, RecurrenceRule } from '../../domain/reminder';
 import {
   validateReminder,
   ReminderValidationError,
   doesReminderImpactMemos,
-} from '../domain/reminderValidator';
+} from '../../domain/reminderValidator';
 import {
   createReminder,
   updateReminder,
   getReminderById,
-} from '../storage/reminderRepository';
-import { generateReminderAudio } from '../services/generateReminderAudio';
+} from './reminderRepository';
+import { generateReminderAudio } from '../reminder/generateReminderAudio';
 
 /**
  * Raw input coming from the UI.
