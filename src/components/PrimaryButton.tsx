@@ -14,9 +14,9 @@ export function PrimaryButton({ title, onPress, color, textColor }) {
 
 const styles = StyleSheet.create({
   btn: {
-    padding: 14,
+    padding: 15,
     borderRadius: 8,
-    marginVertical: 10,
+    marginVertical: 5,
   },
   txt: {
     fontSize: 16,
