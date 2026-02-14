@@ -12,6 +12,11 @@ import { PrimaryButton } from '../components/PrimaryButton';
 import { getColors } from '../theme/colors';
 import { formatDateHuman } from '../utils/dateFormat';
 import { formatRecurrenceHuman, formatSyncStatus } from '../utils/recurrenceFormat';
+import { deleteReminderService } from '../services/reminder/reminderDeletionService';
+import RNFS from 'react-native-fs';
+import { Alert } from 'react-native';
+import { TtsService } from '../services/TtsService';
+import { Pressable } from 'react-native';
 
 type Props = {
   reminder: Reminder;
@@ -21,6 +26,50 @@ type Props = {
 export function ReminderDetailScreen({ reminder, onBack }: Props) {
   const scheme = useColorScheme();
   const colors = getColors(scheme);
+
+  const handleDeleteReminder = (): void => {
+    Alert.alert(
+      'Supprimer le reminder',
+      'Cette action est définitive.',
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteReminderService(reminder.reminderId);
+              onBack();
+            } catch (error) {
+              console.error('[REMINDER][DELETE_ERROR]', error);
+              Alert.alert(
+                'Erreur',
+                'Impossible de supprimer le reminder.',
+              );
+            }
+          },
+        },
+      ],
+    );
+  };
+
+
+  const handlePlayAudio = async (): Promise<void> => {
+    if (!reminder.audioFile) {
+      Alert.alert('Audio indisponible', 'Aucun audio associé à ce reminder.');
+      return;
+    }
+
+    const audioPath = `${RNFS.DocumentDirectoryPath}/tts/${reminder.audioFile}`;
+
+    try {
+      await TtsService.play(audioPath);
+    } catch (error) {
+      console.error('[REMINDER][PLAY_AUDIO_ERROR]', error);
+      Alert.alert('Erreur audio', 'Impossible de lire le message.');
+    }
+  };
+
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -63,14 +112,31 @@ export function ReminderDetailScreen({ reminder, onBack }: Props) {
         </View>
 
         {/* Message */}
-        <View style={[styles.card, { borderColor: colors.inputBorder }]}>
-          <Text style={[styles.cardLabel, { color: colors.text }]}>
-            Message
-          </Text>
-          <Text style={[styles.message, { color: colors.text }]}>
-            {reminder.message}
-          </Text>
-        </View>
+        <Pressable
+          onPress={reminder.audioFile ? handlePlayAudio : undefined}
+          style={({ pressed }) => [
+            { opacity: pressed ? 0.96 : 1 },
+          ]}
+        >
+          <View style={[styles.card, { borderColor: colors.inputBorder }]}>
+            <Text style={[styles.cardLabel, { color: colors.text }]}>
+              Message
+            </Text>
+
+            <Text style={[styles.message, { color: colors.text }]}>
+              {reminder.message}
+            </Text>
+
+            {reminder.audioFile && (
+              <Text style={[styles.audioHint, { color: colors.accent }]}>
+                ▶︎
+              </Text>
+            )}
+          </View>
+        </Pressable>
+
+
+
 
         {/* Secondary info */}
         <View style={[styles.card, { borderColor: colors.inputBorder }]}>
@@ -118,6 +184,13 @@ export function ReminderDetailScreen({ reminder, onBack }: Props) {
 
       {/* Footer */}
       <View style={styles.footer}>
+        <PrimaryButton
+          title="Supprimer"
+          onPress={handleDeleteReminder}
+          color={colors.warning}
+          textColor={colors.buttonText}
+        />
+
         <PrimaryButton
           title="Retour"
           onPress={onBack}
@@ -216,4 +289,11 @@ const styles = StyleSheet.create({
     width: 100,
     borderRadius: 2,
   },
+  audioHint: {
+    position: 'absolute',
+    bottom: 8,
+    right: 10,
+    fontSize: 50,
+  },
+
 });

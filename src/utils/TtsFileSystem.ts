@@ -22,26 +22,16 @@ export async function listTtsAudioFiles(): Promise<string[]> {
     .sort();
 }
 
-/**
- * Generate a TTS filename with a controlled extension.
- *
- * @param extension File extension (default: '.wav')
- */
-export function generateTtsFilename(
+export async function ensureTtsDir(): Promise<void> {
+  const exists = await RNFS.exists(TTS_DIR);
+  if (!exists) {
+    await RNFS.mkdir(TTS_DIR);
+  }
+}
+
+export function buildTtsFilePath(
+  audioHash: string,
   extension: '.wav' | '.mp3' = '.wav',
 ): string {
-  const d = new Date();
-  const pad = (n: number) => n.toString().padStart(2, '0');
-
-  return (
-    'tts_' +
-    d.getFullYear() +
-    pad(d.getMonth() + 1) +
-    pad(d.getDate()) +
-    '_' +
-    pad(d.getHours()) +
-    pad(d.getMinutes()) +
-    pad(d.getSeconds()) +
-    extension
-  );
+  return `${TTS_DIR}/${audioHash}${extension}`;
 }

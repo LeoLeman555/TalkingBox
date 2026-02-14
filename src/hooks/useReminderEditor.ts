@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
-import { createReminderService } from '../services/reminderService';
+import { createReminderService } from '../services/reminder/reminderService';
 import { validateReminder, ReminderValidationError } from '../domain/reminderValidator';
 import {
   Reminder,
