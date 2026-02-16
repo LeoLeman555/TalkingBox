@@ -27,6 +27,7 @@ $Files = @(
   "ble.py",
   "audio.py",
   "storage.py",
+  "rtc.py"
   "sdcard.py",
   "start.py"
 )
