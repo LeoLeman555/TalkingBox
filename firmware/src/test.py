@@ -6,8 +6,12 @@ from machine import Pin, reset_cause
 import sys
 import time
 
+from rtc import TimeRead, RTCNotFoundError
+
+
 class TestResult:
     """Encapsulates the result of a single test."""
+
     def __init__(self, name):
         self.name = name
         self.passed = False
@@ -52,18 +56,46 @@ def system_info_test():
     return result
 
 
+def rtc_presence_test():
+    """Check if DS3231 is detected."""
+    result = TestResult("RTC Presence Test")
+    try:
+        TimeRead()
+        result.set_passed()
+    except RTCNotFoundError as e:
+        result.set_failed(e)
+    except Exception as e:
+        result.set_failed(e)
+    return result
+
+
+def rtc_read_test():
+    """Check if RTC datetime can be read."""
+    result = TestResult("RTC Read Test")
+    try:
+        rtc = TimeRead()
+        dt = rtc.get_datetime()
+        print("RTC datetime:", dt)
+        result.set_passed()
+    except Exception as e:
+        result.set_failed(e)
+    return result
+
+
 def run_tests():
     """Run all tests and print results."""
     print("=== ESP32 MicroPython Test Start ===\n")
+
     results = []
 
-    # Add tests here
     results.append(system_info_test())
-    results.append(gpio_test(2))  # Default onboard LED
-    # results.append(gpio_test(15))  # Example: add more GPIO tests if needed
+    results.append(gpio_test(2))
+    results.append(rtc_presence_test())
+    results.append(rtc_read_test())
 
     print("\n=== Test Results ===")
     passed_count = 0
+
     for r in results:
         print(r)
         if r.passed:

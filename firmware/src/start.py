@@ -6,7 +6,7 @@ from machine import Pin
 from ble import BleService
 from audio import AudioPlayer
 from storage import Storage
-
+from rtc import TimeRead
 
 class Button:
     """Physical button handler."""
@@ -69,6 +69,7 @@ def main():
         audio = None
 
     ble = BleService(storage)
+    rtc = TimeRead()
 
     controller = Controller(audio, storage)
     button = Button(pin=15, callback=controller.on_button_pressed)
