@@ -1,8 +1,9 @@
-# storage.py
 from machine import SPI, Pin
 import os
 import sdcard
-import uhashlib, ubinascii
+import uhashlib
+import ubinascii
+import ujson
 
 
 class Storage:
@@ -10,17 +11,23 @@ class Storage:
 
     SD_ROOT = "/sd"
     FLASH_ROOT = "/flash"
+
     AUDIO_SUBDIR = "audio"
+    DATA_SUBDIR = "data"
+
+    TMP_PREFIX = ".tmp_"
 
     def __init__(self):
         self.use_sd = False
         self.root = self.FLASH_ROOT
+        self._tmp_path = None
 
         self._ensure_flash_root()
         self._try_mount_sd()
         self._ensure_directories()
+        self._cleanup_temp_files()
 
-        print("[STORAGE] Initialized (backend:", "SD" if self.use_sd else "FLASH", ")")
+        print("[STORAGE] Initialized backend:", self.get_backend())
 
     def _ensure_flash_root(self):
         """Ensure flash root exists."""
@@ -31,7 +38,7 @@ class Storage:
             print("[STORAGE] Created flash root", self.FLASH_ROOT)
 
     def _try_mount_sd(self):
-        """Attempt to mount SD card, fallback to flash on failure."""
+        """Attempt to mount SD card."""
         try:
             spi = SPI(
                 2,
@@ -48,54 +55,80 @@ class Storage:
 
             self.use_sd = True
             self.root = self.SD_ROOT
-            print("[STORAGE] SD card mounted")
 
-        except Exception as e:
-            print("[STORAGE] SD unavailable, using flash:", e)
+        except Exception:
+            self.use_sd = False
+            self.root = self.FLASH_ROOT
 
-    def _ensure_directories(self):
-        """Ensure audio directory exists on selected backend."""
-        path = self._audio_dir()
+    def _fallback_to_flash(self):
+        """Fallback to flash backend."""
+        self.use_sd = False
+        self.root = self.FLASH_ROOT
+        self._ensure_directories()
+
+    def _safe_open(self, path, mode):
+        """Open file with SD fallback."""
         try:
-            os.stat(path)
+            return open(path, mode)
         except OSError:
-            os.mkdir(path)
-            print("[STORAGE] Created directory", path)
+            if self.use_sd:
+                self._fallback_to_flash()
+                path = path.replace(self.SD_ROOT, self.FLASH_ROOT)
+                return open(path, mode)
+            raise
 
     def _audio_dir(self):
+        """Return audio directory path."""
         return "{}/{}".format(self.root, self.AUDIO_SUBDIR)
 
-    def save_file(self, filename, data):
-        """Save binary file."""
-        path = "{}/{}".format(self._audio_dir(), filename)
-        with open(path, "wb") as f:
-            f.write(data)
-        print("[STORAGE] File saved:", path)
+    def _data_dir(self):
+        """Return data directory path."""
+        return "{}/{}".format(self.root, self.DATA_SUBDIR)
 
-    def file_exists(self, filename):
-        """Check if file exists."""
-        try:
-            os.stat("{}/{}".format(self._audio_dir(), filename))
-            return True
-        except OSError:
-            return False
+    def get_audio_path(self, filename):
+        """Return absolute audio file path."""
+        return "{}/{}".format(self._audio_dir(), filename)
+
+    def get_json_path(self, filename):
+        """Return absolute JSON file path."""
+        return "{}/{}".format(self._data_dir(), filename)
+
+    def _ensure_directories(self):
+        """Ensure required directories exist."""
+        for path in (self._audio_dir(), self._data_dir()):
+            try:
+                os.stat(path)
+            except OSError:
+                os.mkdir(path)
+
+    def save_file(self, filename, data):
+        """Save full binary audio file."""
+        path = self.get_audio_path(filename)
+        with self._safe_open(path, "wb") as f:
+            f.write(data)
 
     def start_temp_file(self, filename):
         """Create temp file for chunked transfer."""
-        self._tmp_path = "{}/.tmp_{}".format(self._audio_dir(), filename)
-        with open(self._tmp_path, "wb"):
+        self._tmp_path = "{}/{}{}".format(
+            self._audio_dir(), self.TMP_PREFIX, filename
+        )
+        with self._safe_open(self._tmp_path, "wb"):
             pass
 
     def append_chunk(self, data):
-        """Append binary chunk."""
-        with open(self._tmp_path, "ab") as f:
+        """Append binary chunk to temp file."""
+        if not self._tmp_path:
+            raise RuntimeError("No temp file started")
+        with self._safe_open(self._tmp_path, "ab") as f:
             f.write(data)
 
     def finalize_file(self):
-        """Finalize temp file, compute SHA256, and rename."""
-        h = uhashlib.sha256()
+        """Finalize temp file and compute SHA256."""
+        if not self._tmp_path:
+            raise RuntimeError("No temp file to finalize")
 
-        with open(self._tmp_path, "rb") as f:
+        h = uhashlib.sha256()
+        with self._safe_open(self._tmp_path, "rb") as f:
             while True:
                 chunk = f.read(1024)
                 if not chunk:
@@ -103,11 +136,110 @@ class Storage:
                 h.update(chunk)
 
         digest = ubinascii.hexlify(h.digest()).decode()
-        final_path = self._tmp_path.replace(".tmp_", "")
+        final_path = self._tmp_path.replace(self.TMP_PREFIX, "")
         os.rename(self._tmp_path, final_path)
+        self._tmp_path = None
 
         print("[STORAGE] Finalized file:", final_path)
         return digest
+
+    def audio_exists(self, filename):
+        """Check if audio file exists."""
+        try:
+            os.stat(self.get_audio_path(filename))
+            return True
+        except OSError:
+            return False
+
+    def delete_audio(self, filename):
+        """Delete audio file."""
+        try:
+            os.remove(self.get_audio_path(filename))
+            return True
+        except OSError:
+            return False
+
+    def _write_pretty_json(self, f, obj, indent=0):
+        """Write JSON with deterministic formatting."""
+        space = "    "
+        if isinstance(obj, dict):
+            f.write("{\n")
+            keys = list(obj.keys())
+            for i, key in enumerate(keys):
+                f.write(space * (indent + 1))
+                f.write('"{}": '.format(key))
+                self._write_pretty_json(f, obj[key], indent + 1)
+                if i < len(keys) - 1:
+                    f.write(",")
+                f.write("\n")
+            f.write(space * indent + "}")
+        elif isinstance(obj, list):
+            f.write("[\n")
+            for i, item in enumerate(obj):
+                f.write(space * (indent + 1))
+                self._write_pretty_json(f, item, indent + 1)
+                if i < len(obj) - 1:
+                    f.write(",")
+                f.write("\n")
+            f.write(space * indent + "]")
+        elif isinstance(obj, str):
+            f.write('"{}"'.format(obj))
+        elif obj is None:
+            f.write("null")
+        elif isinstance(obj, bool):
+            f.write("true" if obj else "false")
+        else:
+            f.write(str(obj))
+
+    def write_json(self, filename, data):
+        """Write JSON atomically."""
+        tmp = "{}/{}{}".format(self._data_dir(), self.TMP_PREFIX, filename)
+        final = self.get_json_path(filename)
+
+        with self._safe_open(tmp, "w") as f:
+            self._write_pretty_json(f, data)
+            f.write("\n")
+
+        os.rename(tmp, final)
+
+    def read_json(self, filename):
+        """Read JSON file."""
+        with self._safe_open(self.get_json_path(filename), "r") as f:
+            return ujson.load(f)
+
+    def safe_read_json(self, filename, default=None):
+        """Read JSON with fallback default."""
+        try:
+            return self.read_json(filename)
+        except Exception:
+            return default
+
+    def update_json(self, filename, update_fn):
+        """Update JSON content."""
+        data = self.safe_read_json(filename, {})
+        update_fn(data)
+        self.write_json(filename, data)
+
+    def delete_json(self, filename):
+        """Delete JSON file."""
+        try:
+            os.remove(self.get_json_path(filename))
+            return True
+        except OSError:
+            return False
+
+    def _cleanup_temp_files(self):
+        """Remove abandoned temp files."""
+        for directory in (self._audio_dir(), self._data_dir()):
+            try:
+                for fname in os.listdir(directory):
+                    if fname.startswith(self.TMP_PREFIX):
+                        try:
+                            os.remove("{}/{}".format(directory, fname))
+                        except OSError:
+                            pass
+            except OSError:
+                pass
 
     def get_backend(self):
         """Return active backend name."""
