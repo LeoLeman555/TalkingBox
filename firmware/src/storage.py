@@ -55,27 +55,15 @@ class Storage:
 
             self.use_sd = True
             self.root = self.SD_ROOT
+            os.stat(self.SD_ROOT)
 
         except Exception:
             self.use_sd = False
             self.root = self.FLASH_ROOT
 
-    def _fallback_to_flash(self):
-        """Fallback to flash backend."""
-        self.use_sd = False
-        self.root = self.FLASH_ROOT
-        self._ensure_directories()
-
     def _safe_open(self, path, mode):
-        """Open file with SD fallback."""
-        try:
-            return open(path, mode)
-        except OSError:
-            if self.use_sd:
-                self._fallback_to_flash()
-                path = path.replace(self.SD_ROOT, self.FLASH_ROOT)
-                return open(path, mode)
-            raise
+        """Open file without backend mutation."""
+        return open(path, mode)
 
     def _audio_dir(self):
         """Return audio directory path."""

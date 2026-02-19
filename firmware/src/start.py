@@ -7,6 +7,8 @@ from ble import BleService
 from audio import AudioPlayer
 from storage import Storage
 from rtc import TimeRead
+from scheduler import MemoScheduler
+
 
 class Button:
     """Physical button handler."""
@@ -24,7 +26,7 @@ class Button:
         state = self.button.value()
         if self.last_state == 1 and state == 0:
             self.callback()
-            time.sleep(0.2)  # debounce
+            time.sleep(0.2)
         self.last_state = state
 
 
@@ -55,7 +57,6 @@ class Controller:
             self.audio.pause()
 
 
-
 def main():
     """Main firmware entry point."""
     print("[START] Talking Box firmware booting")
@@ -73,12 +74,27 @@ def main():
 
     controller = Controller(audio, storage)
     button = Button(pin=15, callback=controller.on_button_pressed)
+    scheduler = MemoScheduler(rtc, storage, audio)
 
     print("[START] Ready")
 
     while True:
+        # Poll hardware button
         button.poll()
 
+        # Run scheduler
+        scheduler.tick()
+
+        # Flush BLE chunk queue (NO SD access in IRQ anymore)
+        if hasattr(ble, "has_pending_chunk") and ble.has_pending_chunk():
+            chunk = ble.pop_chunk()
+            if chunk:
+                try:
+                    storage.append_chunk(chunk)
+                except Exception as e:
+                    print("[START] SD write error:", e)
+
+        # Finalize BLE file when requested
         if ble.end_requested:
             ble.end_requested = False
             try:
