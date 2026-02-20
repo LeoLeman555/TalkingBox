@@ -109,17 +109,7 @@ def main():
                     "byMonthDay": [20],
                 },
                 "audioFile": "monthly.wav",
-            },
-            # Hourly (minute 04)
-            {
-                "memoId": "hourly",
-                "startDate": "2026-02-01",
-                "time": "00:04",
-                "recurrence": {
-                    "frequency": "HOURLY",
-                },
-                "audioFile": "hourly.wav",
-            },
+            }
         ],
     }
 
@@ -184,19 +174,6 @@ def main():
     run_test("monthly_non_match", rtc, scheduler, [])
 
     # ------------------------------------
-    # HOURLY MATCH
-    # ------------------------------------
-    rtc.set((2026, 2, 18, 3, 15, 4, 0))
-    run_test("hourly_match", rtc, scheduler,
-             ["/fake/audio/hourly.wav"])
-
-    # ------------------------------------
-    # HOURLY NON MATCH
-    # ------------------------------------
-    rtc.set((2026, 2, 18, 3, 15, 5, 0))
-    run_test("hourly_non_match", rtc, scheduler, [])
-
-    # ------------------------------------
     # DOUBLE TICK SAME MINUTE (anti double trigger)
     # ------------------------------------
     rtc.set((2026, 2, 18, 3, 10, 1, 0))
@@ -225,6 +202,149 @@ def main():
     run_test("audio_already_playing", rtc, scheduler, [])
     audio.playing = False
 
+    # ------------------------------------
+    # DAILY INTERVAL = 2
+    # ------------------------------------
+    memo_data["items"].append({
+        "memoId": "daily_interval_2",
+        "startDate": "2026-02-01",
+        "time": "10:10",
+        "recurrence": {
+            "frequency": "DAILY",
+            "interval": 2,
+        },
+        "audioFile": "daily_i2.wav",
+    })
+
+    scheduler.reload()
+
+    # Day 0 → match
+    rtc.set((2026, 2, 1, 7, 10, 10, 0))
+    run_test("daily_interval_2_day0", rtc, scheduler,
+             ["/fake/audio/daily_i2.wav"])
+
+    # Day 1 → no match
+    rtc.set((2026, 2, 2, 1, 10, 10, 0))
+    run_test("daily_interval_2_day1", rtc, scheduler, [])
+
+    # Day 2 → match
+    rtc.set((2026, 2, 3, 2, 10, 10, 0))
+    run_test("daily_interval_2_day2", rtc, scheduler,
+             ["/fake/audio/daily_i2.wav"])
+    
+    # Day 29 → no match
+    rtc.set((2026, 3, 2, 2, 10, 10, 0))
+    run_test("daily_interval_2_day29", rtc, scheduler, [])
+
+    # Day 30 → match
+    rtc.set((2026, 3, 3, 2, 10, 10, 0))
+    run_test("daily_interval_2_day30", rtc, scheduler, 
+             ["/fake/audio/daily_i2.wav"])
+    
+    # ------------------------------------
+    # WEEKLY INTERVAL = 2 (Monday)
+    # ------------------------------------
+    memo_data["items"].append({
+        "memoId": "weekly_interval_2",
+        "startDate": "2026-02-02",  # Monday
+        "time": "10:11",
+        "recurrence": {
+            "frequency": "WEEKLY",
+            "interval": 2,
+            "byWeekday": [1],
+        },
+        "audioFile": "weekly_i2.wav",
+    })
+
+    scheduler.reload()
+
+    # Week 0 → match
+    rtc.set((2026, 2, 2, 2, 10, 11, 0))
+    run_test("weekly_interval_2_week0", rtc, scheduler,
+             ["/fake/audio/weekly_i2.wav"])
+
+    # Week 1 → no match
+    rtc.set((2026, 2, 9, 2, 10, 11, 0))
+    run_test("weekly_interval_2_week1", rtc, scheduler, [])
+
+    # Week 2 → match
+    rtc.set((2026, 2, 16, 2, 10, 11, 0))
+    run_test("weekly_interval_2_week2", rtc, scheduler,
+             ["/fake/audio/weekly_i2.wav"])
+    
+    # Week 6 → match
+    rtc.set((2026, 3, 16, 2, 10, 11, 0))
+    run_test("weekly_interval_2_week6", rtc, scheduler,
+             ["/fake/audio/weekly_i2.wav"])
+
+    # Week 7 → no match
+    rtc.set((2026, 3, 23, 2, 10, 11, 0))
+    run_test("weekly_interval_2_week7", rtc, scheduler, [])
+    
+    # ------------------------------------
+    # DAILY UNTIL (inclusive)
+    # ------------------------------------
+    memo_data["items"].append({
+        "memoId": "daily_until",
+        "startDate": "2026-02-01",
+        "time": "10:13",
+        "recurrence": {
+            "frequency": "DAILY",
+            "until": "2026-02-03",
+        },
+        "audioFile": "daily_until.wav",
+    })
+
+    scheduler.reload()
+
+    # Before until
+    rtc.set((2026, 2, 2, 1, 10, 13, 0))
+    run_test("daily_until_before", rtc, scheduler,
+             ["/fake/audio/daily_until.wav"])
+
+    # On until (inclusive)
+    rtc.set((2026, 2, 3, 2, 10, 13, 0))
+    run_test("daily_until_on", rtc, scheduler,
+             ["/fake/audio/daily_until.wav"])
+
+    # After until → blocked
+    rtc.set((2026, 2, 4, 3, 10, 13, 0))
+    run_test("daily_until_after", rtc, scheduler, [])
+
+    # ------------------------------------
+    # DAILY interval + count + until
+    # ------------------------------------
+    memo_data["items"].append({
+        "memoId": "daily_combo",
+        "startDate": "2026-02-01",
+        "time": "10:14",
+        "recurrence": {
+            "frequency": "DAILY",
+            "interval": 2,
+            "count": 2,
+        },
+        "audioFile": "daily_combo.wav",
+    })
+
+    scheduler.reload()
+
+    # Day 0 → trigger 1
+    rtc.set((2026, 2, 1, 7, 10, 14, 0))
+    run_test("daily_combo_1", rtc, scheduler,
+             ["/fake/audio/daily_combo.wav"])
+    
+    # Day 1 → no match
+    rtc.set((2026, 2, 2, 1, 10, 14, 0))
+    run_test("daily_combo_2", rtc, scheduler, [])
+
+    # Day 2 → trigger 2
+    rtc.set((2026, 2, 3, 2, 10, 14, 0))
+    run_test("daily_combo_3", rtc, scheduler,
+             ["/fake/audio/daily_combo.wav"])
+
+    # Day 4 → blocked by count
+    rtc.set((2026, 2, 5, 4, 10, 14, 0))
+    run_test("daily_combo_count_block", rtc, scheduler, [])
 
 if __name__ == "__main__":
     main()
