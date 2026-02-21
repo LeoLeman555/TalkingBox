@@ -82,7 +82,14 @@ export async function sendFileViaBle({
 
     console.log('[BLE FILE] Sending START');
     setState('SEND START');
-    await ble.writeStartBinary(meta.size, meta.sha256, meta.totalChunks);
+    const filename = filePath.split('/').pop() ?? 'unknown';
+
+    await ble.writeStartBinary(
+      meta.size,
+      meta.sha256,
+      filename,
+      meta.totalChunks,
+    );
 
     const t0 = Date.now();
     setState('WAIT ACK');

@@ -66,6 +66,10 @@ class BleService:
         ((self._handle_start, self._handle_chunk, self._handle_status),) = \
             self.ble.gatts_register_services((service,))
 
+        # START frame can exceed default 20 bytes
+        self.ble.gatts_set_buffer(self._handle_start, 64, True)
+
+        # Chunk buffer for file data
         self.ble.gatts_set_buffer(self._handle_chunk, 512, True)
 
         self.ble.gap_advertise(100_000, self._adv_payload())
@@ -101,15 +105,19 @@ class BleService:
     def _on_start_write(self):
         raw = self.ble.gatts_read(self._handle_start)
 
+        print("[BLE] START raw len:", len(raw), raw)
+
+        # END frame
         if raw == b"\x02":
             self.end_requested = True
             return
 
-        if len(raw) != 17 or raw[0] != 0x01:
+        if len(raw) < 18 or raw[0] != 0x01:
             self._notify({"event": "start_error", "msg": "invalid frame"})
             return
 
         total_chunks = (raw[1] << 8) | raw[2]
+
         total_size = (
             (raw[3] << 24)
             | (raw[4] << 16)
@@ -119,25 +127,41 @@ class BleService:
 
         chunk_size = (raw[7] << 8) | raw[8]
 
+        filename_length = raw[9]
+
+        expected_len = 10 + filename_length + 8
+
+        if len(raw) != expected_len:
+            self._notify({"event": "start_error", "msg": "bad length"})
+            return
+
+        filename_bytes = raw[10:10 + filename_length]
+        filename = filename_bytes.decode()
+
+        sha_start = 10 + filename_length
+        sha_short = ubinascii.hexlify(
+            raw[sha_start:sha_start + 8]
+        ).decode()
+
         if total_size <= 0 or total_size > self.MAX_FILE_SIZE:
             self._notify({"event": "start_error", "msg": "invalid size"})
             return
 
         self.metadata = {
-            "filename": "received.wav",
+            "filename": filename,
             "total_chunks": total_chunks,
             "total_size": total_size,
             "chunk_size": chunk_size,
-            "sha256_short": ubinascii.hexlify(raw[9:17]).decode(),
+            "sha256_short": sha_short,
         }
 
-        self.storage.start_temp_file(self.metadata["filename"])
+        self.storage.start_temp_file(filename)
 
         self.expected_seq = 0
         self.bytes_written = 0
         self.end_requested = False
 
-        print("[BLE] START ok", total_chunks, "chunks, chunk_size =", chunk_size)
+        print("[BLE] START OK:", filename)
 
         self._notify({"event": "start_ack"})
 

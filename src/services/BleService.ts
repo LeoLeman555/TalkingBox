@@ -93,34 +93,47 @@ export class BleService {
   async writeStartBinary(
     totalSize: number,
     sha256: string,
+    filename: string,
     totalChunks?: number,
   ) {
     if (!this.connected) throw new Error('Not connected');
 
-    // Calculate chunkSize if not passed
     if (!totalChunks) {
       totalChunks = Math.ceil(totalSize / this.chunkSize);
-    } else {
-      this.chunkSize = Math.ceil(totalSize / totalChunks);
     }
 
     const shaShortHex = sha256.substring(0, 16);
     const shaBytes = Buffer.from(shaShortHex, 'hex');
+    const filenameBytes = Buffer.from(filename, 'utf8');
 
-    const buf = Buffer.alloc(17);
-    buf.writeUInt8(0x01, 0); // START flag
-    buf.writeUInt16BE(totalChunks, 1); // total chunks
-    buf.writeUInt32BE(totalSize, 3); // total size
-    buf.writeUInt16BE(this.chunkSize, 7); // chunk size
-    shaBytes.copy(buf, 9); // SHA short
+    if (filenameBytes.length > 120) {
+      throw new Error('Filename too long');
+    }
 
-    await this.connected.writeCharacteristicWithoutResponseForService(
+    const headerLength =
+      1 + 2 + 4 + 2 + 1 + filenameBytes.length + 8;
+
+    const buf = Buffer.alloc(headerLength);
+
+    let offset = 0;
+
+    buf.writeUInt8(0x01, offset); offset += 1;
+    buf.writeUInt16BE(totalChunks, offset); offset += 2;
+    buf.writeUInt32BE(totalSize, offset); offset += 4;
+    buf.writeUInt16BE(this.chunkSize, offset); offset += 2;
+
+    buf.writeUInt8(filenameBytes.length, offset); offset += 1;
+    filenameBytes.copy(buf, offset); offset += filenameBytes.length;
+
+    shaBytes.copy(buf, offset);
+
+    await this.connected.writeCharacteristicWithResponseForService(
       SERVICE_UUID,
       CHAR_START,
       buf.toString('base64'),
     );
 
-    console.log('[BLE] START sent', {
+    console.log('[BLE] START sent for', filename, {
       totalChunks,
       totalSize,
       chunkSize: this.chunkSize,
