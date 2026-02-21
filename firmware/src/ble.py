@@ -39,6 +39,10 @@ class BleService:
         self.bytes_written = 0
         self.end_requested = False
 
+        self._chunk_queue = []
+        self._has_pending_chunk = False
+
+
         self._setup()
 
     # ---------- Setup ----------
@@ -147,9 +151,13 @@ class BleService:
             self._notify({"event": "chunk_error", "msg": "seq mismatch"})
             return
 
-        self.storage.append_chunk(payload)
+        # Queue chunk instead of writing in IRQ
+        self._chunk_queue.append(payload)
+        self._has_pending_chunk = True
+
         self.bytes_written += len(payload)
         self.expected_seq += 1
+
 
         if seq % 2 == 0:
             self._notify({'event': 'ack', 'seq': seq})
@@ -165,6 +173,22 @@ class BleService:
         self.metadata = None
         self.bytes_written = 0
         print("[BLE] File finalised")
+
+    def has_pending_chunk(self):
+        return self._has_pending_chunk
+
+    def pop_chunk(self):
+        if not self._chunk_queue:
+            self._has_pending_chunk = False
+            return None
+
+        chunk = self._chunk_queue.pop(0)
+
+        if not self._chunk_queue:
+            self._has_pending_chunk = False
+
+        return chunk
+
 
     # ---------- Utils ----------
 
