@@ -234,3 +234,7 @@ class MemoScheduler:
             print("[SCHED] Trigger:", path)
         except Exception as e:
             print("[SCHED] Thread start failed:", e)
+
+    def reload(self):
+        """Reload memos from storage."""
+        self._load_memos()

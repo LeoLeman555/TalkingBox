@@ -99,6 +99,8 @@ def main():
             ble.end_requested = False
             try:
                 ble.finalize_file()
+                scheduler.reload()
+                print("[START] Memos reloaded after BLE sync")
             except Exception as e:
                 print("[START] Finalize failed:", e)
 

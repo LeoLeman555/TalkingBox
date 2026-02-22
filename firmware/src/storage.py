@@ -110,11 +110,12 @@ class Storage:
         with self._safe_open(self._tmp_path, "ab") as f:
             f.write(data)
 
-    def finalize_file(self):
-        """Finalize temp file and compute SHA256."""
+    def finalize_temp_file(self, filename):
+        """Finalize temp file and route to audio or data directory."""
         if not self._tmp_path:
             raise RuntimeError("No temp file to finalize")
 
+        # Compute SHA256
         h = uhashlib.sha256()
         with self._safe_open(self._tmp_path, "rb") as f:
             while True:
@@ -124,10 +125,27 @@ class Storage:
                 h.update(chunk)
 
         digest = ubinascii.hexlify(h.digest()).decode()
-        final_path = self._tmp_path.replace(self.TMP_PREFIX, "")
-        os.rename(self._tmp_path, final_path)
-        self._tmp_path = None
 
+        # Route by extension
+        if filename.endswith(".json"):
+            # Read temp JSON
+            with self._safe_open(self._tmp_path, "r") as f:
+                data = ujson.load(f)
+
+            # Write atomically to /data
+            self.write_json(filename, data)
+
+            # Remove temp file
+            os.remove(self._tmp_path)
+
+            final_path = self.get_json_path(filename)
+
+        else:
+            # Default: audio (wav)
+            final_path = self._tmp_path.replace(self.TMP_PREFIX, "")
+            os.rename(self._tmp_path, final_path)
+
+        self._tmp_path = None
         print("[STORAGE] Finalized file:", final_path)
         return digest
 
