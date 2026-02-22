@@ -10,6 +10,8 @@ main.py
 
 docs/SECURITY_LOCAL.txt
 
+android/gradle.properties
+
 # Xcode
 #
 build/

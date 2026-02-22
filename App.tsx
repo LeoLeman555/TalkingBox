@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { MainScreen } from './src/screens/MainScreen';
 import { TtsFilesScreen } from './src/screens/TtsFilesScreen';
 import { ReminderEditorScreen } from './src/screens/ReminderEditorScreen';
-import { ReminderListScreen } from './src/screens/ReminderListScreen';
 import { ReminderDetailScreen } from './src/screens/ReminderDetailScreen';
 import { Reminder } from './src/domain/reminder';
 
@@ -22,20 +21,9 @@ export default function App() {
     return (
       <MainScreen
         selectedTtsPath={selectedTtsPath}
-        onSelectTts={setSelectedTtsPath}
         onOpenFiles={() => setRoute('TTS_FILES')}
         onCreateReminder={() => setRoute('REMINDER_EDITOR')}
-        onViewReminders={() => setRoute('REMINDER_LIST')}
-      />
-    );
-  }
-
-  if (route === 'REMINDER_LIST') {
-    return (
-      <ReminderListScreen
-        onCreate={() => setRoute('REMINDER_EDITOR')}
-        onBack={() => setRoute('MAIN')}
-        onSelect={(r) => {
+        onEditReminder={(r) => {
           setSelectedReminder(r);
           setRoute('REMINDER_DETAIL');
         }}
@@ -47,7 +35,7 @@ export default function App() {
     return (
       <ReminderDetailScreen
         reminder={selectedReminder}
-        onBack={() => setRoute('REMINDER_LIST')}
+        onBack={() => setRoute('MAIN')}
       />
     );
   }
@@ -55,7 +43,7 @@ export default function App() {
   if (route === 'REMINDER_EDITOR') {
     return (
       <ReminderEditorScreen
-        onBack={() => setRoute('REMINDER_LIST')}
+        onBack={() => setRoute('MAIN')}
       />
     );
   }

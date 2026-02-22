@@ -10,6 +10,8 @@ import {
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ProgressBar } from '../components/ProgressBar';
 import { DeviceInfo } from '../components/DeviceInfo';
+import { ReminderList } from '../components/reminder/ReminderList';
+
 import { useBlePermissions } from '../hooks/useBlePermissions';
 import { BleService, BleDeviceInfo } from '../services/BleService';
 import { sendFileViaBle } from '../services/ble/sendFileViaBle';
@@ -17,22 +19,22 @@ import { getColors } from '../theme/colors';
 import { generateMemoFile } from '../services/memo/memoRepository';
 import RNFS from 'react-native-fs';
 import { syncWithEsp } from '../services/ble/syncWithEsp';
+import { Reminder } from '../domain/reminder';
 
 const ble = new BleService();
 
 type Props = {
   selectedTtsPath: string | null;
-  onSelectTts: (path: string | null) => void;
   onOpenFiles: () => void;
   onCreateReminder: () => void;
-  onViewReminders: () => void;
+  onEditReminder: (reminder: Reminder) => void;
 };
 
 export function MainScreen({
   selectedTtsPath,
   onOpenFiles,
   onCreateReminder,
-  onViewReminders,
+  onEditReminder,
 }: Props) {
   useBlePermissions();
 
@@ -109,7 +111,6 @@ export function MainScreen({
         setDeviceInfo(info);
       } catch (infoError) {
         console.log('[BLE] readDeviceInfo error:', infoError);
-        setProgress(50);
         setDeviceInfo(null);
       }
     } catch (error) {
@@ -120,9 +121,9 @@ export function MainScreen({
     }
   };
 
-    const handleSendBleFile = async () => {
+  const handleSendBleFile = async () => {
     if (sending) return;
-    
+
     if (!selectedTtsPath) {
       Alert.alert('No file', 'No TTS file selected.');
       return;
@@ -140,96 +141,123 @@ export function MainScreen({
       console.error('[BLE FILE][ERROR]', e);
       setState('ERROR');
     } finally {
-    setSending(false);
+      setSending(false);
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      <Text style={[styles.title, { color: colors.text }]}>
-        Talking Box — Prototype
-      </Text>
+      
+      {/* ===== HEADER SYSTEM ===== */}
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.text }]}>
+          Talking Box - Prototype
+        </Text>
 
-      <PrimaryButton
-        title="Créer un reminder"
-        onPress={onCreateReminder}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
+        <Text style={[styles.info, { color: colors.text }]}>
+          {state}
+        </Text>
 
-      <PrimaryButton
-        title="Voir les reminders"
-        onPress={onViewReminders}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
+        {deviceInfo && (
+          <DeviceInfo info={deviceInfo} colors={colors} />
+        )}
+      </View>
 
-      <PrimaryButton
-        title="Générer memo.json (test)"
+      {/* ===== REMINDER LIST ===== */}
+      <View style={styles.listContainer}>
+        <ReminderList
+          onSelect={onEditReminder}
+        />
+      </View>
+
+      {/* ===== FOOTER ===== */}
+      <View style={styles.footer}>
+        <PrimaryButton
+          title="Créer un reminder"
+          onPress={onCreateReminder}
+          color={colors.accent}
+          textColor={colors.buttonText}
+        />
+
+        <PrimaryButton
+          title="Synchroniser"
+          onPress={handleSyncWithEsp}
+          color={colors.accent}
+          textColor={colors.buttonText}
+        />
+      </View>
+
+      {/* ===== DEBUG PANEL ===== */}
+      <View style={styles.debug}>
+        <PrimaryButton
+          title="Connexion BLE"
+          onPress={handleRealBle}
+          color={colors.inputBorder}
+          textColor={colors.text}
+        />
+
+        <PrimaryButton
+        title="Générer les Mémos"
         onPress={handleGenerateMemo}
         color={colors.accent}
         textColor={colors.buttonText}
-      />
+        />
 
-      <PrimaryButton
-        title="Fichiers audio (TTS)"
-        onPress={onOpenFiles}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
+        <ProgressBar
+          progress={progress}
+          height={14}
+          backgroundColor={colors.inputBorder}
+          fillColor={colors.accent}
+        />
 
-      <PrimaryButton
-        title="Connexion BLE"
-        onPress={handleRealBle}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
+        <Text style={[styles.info, { color: colors.text }]}>
+          {progress} %
+        </Text>
 
-      {deviceInfo && <DeviceInfo info={deviceInfo} colors={colors} />}
+        <PrimaryButton
+          title="Fichiers audio (TTS)"
+          onPress={onOpenFiles}
+          color={colors.inputBorder}
+          textColor={colors.text}
+        />
 
-      <Text style={[styles.info, { color: colors.text }]}>{state}</Text>
-
-      <ProgressBar
-        progress={progress}
-        height={14}
-        backgroundColor={colors.inputBorder}
-        fillColor={colors.accent}
-      />
-
-      <Text style={[styles.info, { color: colors.text }]}>
-        {progress} %
-      </Text>
-
-      {/* <PrimaryButton
-        title="Envoyer audio sélectionné via BLE"
-        onPress={handleSendBleFile}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      /> */}
-
-      <PrimaryButton
-        title="Synchronize with ESP"
-        onPress={handleSyncWithEsp}
-        color={colors.accent}
-        textColor={colors.buttonText}
-      />
+        <PrimaryButton
+          title="Envoyer audio sélectionné"
+          onPress={handleSendBleFile}
+          color={colors.inputBorder}
+          textColor={colors.text}
+        />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20 },
+  container: {
+    flex: 1,
+    padding: 20,
+  },
+  header: {
+    marginBottom: 10,
+  },
   title: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '700',
-    marginBottom: 20,
     textAlign: 'center',
   },
   info: {
     marginTop: 6,
-    paddingBottom: 10,
-    fontSize: 18,
-    fontWeight: '500',
+    fontSize: 16,
     textAlign: 'center',
+  },
+  listContainer: {
+    flex: 1,
+    marginVertical: 10,
+  },
+  footer: {
+    marginTop: 10,
+  },
+  debug: {
+    paddingTop: 12,
   },
 });
