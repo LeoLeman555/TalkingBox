@@ -16,6 +16,7 @@ import { sendFileViaBle } from '../services/ble/sendFileViaBle';
 import { getColors } from '../theme/colors';
 import { generateMemoFile } from '../services/memo/memoRepository';
 import RNFS from 'react-native-fs';
+import { syncWithEsp } from '../services/ble/syncWithEsp';
 
 const ble = new BleService();
 
@@ -42,6 +43,30 @@ export function MainScreen({
   const [progress, setProgress] = useState(0);
   const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
   const [sending, setSending] = useState(false);
+
+  const handleSyncWithEsp = async () => {
+    if (sending) return;
+
+    try {
+      setSending(true);
+      setProgress(0);
+      setState('SYNC START');
+
+      await syncWithEsp({
+        ble,
+        setProgress,
+        setState,
+      });
+
+      Alert.alert('Success', 'Synchronization completed successfully');
+    } catch (error) {
+      console.error('[SYNC][ERROR]', error);
+      setState('SYNC ERROR');
+      Alert.alert('Error', String(error));
+    } finally {
+      setSending(false);
+    }
+  };
 
   const handleGenerateMemo = async () => {
     try {
@@ -175,9 +200,16 @@ export function MainScreen({
         {progress} %
       </Text>
 
-      <PrimaryButton
+      {/* <PrimaryButton
         title="Envoyer audio sélectionné via BLE"
         onPress={handleSendBleFile}
+        color={colors.accent}
+        textColor={colors.buttonText}
+      /> */}
+
+      <PrimaryButton
+        title="Synchronize with ESP"
+        onPress={handleSyncWithEsp}
         color={colors.accent}
         textColor={colors.buttonText}
       />

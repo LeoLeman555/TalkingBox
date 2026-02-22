@@ -182,12 +182,11 @@ class BleService:
         self.bytes_written += len(payload)
         self.expected_seq += 1
 
-
         if seq % 2 == 0:
             self._notify({'event': 'ack', 'seq': seq})
 
     def finalize_file(self):
-        calc = self.storage.finalize_file()
+        calc = self.storage.finalize_temp_file(self.metadata["filename"])
 
         if not calc.startswith(self.metadata["sha256_short"]):
             self._notify({"event": "hash_mismatch"})

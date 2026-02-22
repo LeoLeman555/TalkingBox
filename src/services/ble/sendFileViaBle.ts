@@ -2,12 +2,24 @@ import { BleService } from '../BleService';
 import { computeMeta, chunkFile } from '../../logic/FileChunker';
 import { delay } from '../../utils/delay';
 
+type SupportedFileType = 'wav' | 'json';
+
 type SendFileContext = {
   ble: BleService;
   filePath: string;
   setProgress: (v: number) => void;
   setState: (v: string) => void;
 };
+
+/** Detect supported file type from filename. */
+function detectFileType(filename: string): SupportedFileType {
+  const ext = filename.split('.').pop()?.toLowerCase();
+
+  if (ext === 'wav') return 'wav';
+  if (ext === 'json') return 'json';
+
+  throw new Error(`Unsupported file type: .${ext}`);
+}
 
 export async function sendFileViaBle({
   ble,
@@ -19,20 +31,20 @@ export async function sendFileViaBle({
   let doneOrFailed = false;
 
   try {
-    console.log('[BLE FILE] Preparing file...');
     setProgress(0);
     setState('PREP FILE');
+    console.log('[BLE FILE] Preparing file...');
+
+    const filename = filePath.split('/').pop();
+    if (!filename) {
+      throw new Error('Invalid file path');
+    }
+
+    const fileType = detectFileType(filename);
+    console.log('[BLE FILE] File type:', fileType);
 
     const meta = await computeMeta(filePath, ble.chunkSize);
     console.log('[BLE FILE] File meta:', meta);
-
-    if (!ble.isConnected()) {
-      console.log('[BLE FILE] Not connected, scanning...');
-      setState('CONNECTING...');
-      await ble.scanAndConnect();
-      console.log('[BLE FILE] Connected');
-      setState('CONNECTED');
-    }
 
     let startAck = false;
     let done = false;
@@ -44,6 +56,7 @@ export async function sendFileViaBle({
 
     await ble.subscribeStatus(msg => {
       if (!mounted || doneOrFailed) return;
+
       console.log('[STATUS MSG]', msg);
 
       switch (msg.event) {
@@ -53,9 +66,11 @@ export async function sendFileViaBle({
           break;
 
         case 'ack': {
-          const p = Math.floor((msg.seq / meta.totalChunks) * 100);
-          console.log(`[STATUS] Chunk ack: seq=${msg.seq}, progress=${p}%`);
-          setProgress(p);
+          const progress = Math.min(
+            100,
+            Math.floor((msg.seq / meta.totalChunks) * 100),
+          );
+          setProgress(progress);
           break;
         }
 
@@ -80,9 +95,9 @@ export async function sendFileViaBle({
       }
     });
 
-    console.log('[BLE FILE] Sending START');
+    // ---------- START ----------
     setState('SEND START');
-    const filename = filePath.split('/').pop() ?? 'unknown';
+    console.log('[BLE FILE] Sending START');
 
     await ble.writeStartBinary(
       meta.size,
@@ -91,36 +106,47 @@ export async function sendFileViaBle({
       meta.totalChunks,
     );
 
-    const t0 = Date.now();
-    setState('WAIT ACK');
+    const startTimeout = Date.now();
+    setState('WAIT START ACK');
+
     while (!startAck) {
       if (failed) throw new Error('ESP rejected START');
-      if (Date.now() - t0 > 3000) throw new Error('START ACK timeout');
+      if (Date.now() - startTimeout > 3000) {
+        throw new Error('START ACK timeout');
+      }
       await delay(30);
     }
 
-    console.log('[BLE FILE] Sending chunks...');
+    // ---------- CHUNKS ----------
     setState('SEND CHUNKS');
+    console.log('[BLE FILE] Sending chunks...');
+
     for await (const { seq, payload } of chunkFile(filePath, ble.chunkSize)) {
-      if (failed) throw new Error('Transfer aborted');
+      if (failed) {
+        throw new Error('Transfer aborted');
+      }
       await ble.writeChunk(seq, payload);
     }
 
-    console.log('[BLE FILE] Sending END...');
-    await delay(200);
+    // ---------- END ----------
     setState('SEND END');
+    await delay(200);
     await ble.sendEnd();
 
-    console.log('[BLE FILE] Waiting final confirmation from ESP...');
+    // ---------- FINAL ACK ----------
     setState('WAIT ESP32');
-    const t1 = Date.now();
+    const finalTimeout = Date.now();
+
     while (!done) {
       if (failed) throw new Error('ESP failed storing file');
-      if (Date.now() - t1 > 10000) throw new Error('ESP store timeout');
+      if (Date.now() - finalTimeout > 10000) {
+        throw new Error('ESP store timeout');
+      }
       await delay(50);
     }
+
     console.log('[BLE FILE] Transfer completed successfully');
-    } finally {
+  } finally {
     mounted = false;
   }
 }
