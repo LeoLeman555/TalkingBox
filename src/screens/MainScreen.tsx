@@ -9,12 +9,10 @@ import {
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ProgressBar } from '../components/ProgressBar';
-import { DeviceInfo } from '../components/DeviceInfo';
 import { ReminderList } from '../components/reminder/ReminderList';
 
 import { useBlePermissions } from '../hooks/useBlePermissions';
-import { BleService, BleDeviceInfo } from '../services/BleService';
-import { sendFileViaBle } from '../services/ble/sendFileViaBle';
+import { BleService } from '../services/ble/bleService';
 import { getColors } from '../theme/colors';
 import { generateMemoFile } from '../services/memo/memoRepository';
 import RNFS from 'react-native-fs';
@@ -31,8 +29,8 @@ type Props = {
 };
 
 export function MainScreen({
-  selectedTtsPath,
-  onOpenFiles,
+  // selectedTtsPath,
+  // onOpenFiles,
   onCreateReminder,
   onEditReminder,
 }: Props) {
@@ -43,7 +41,6 @@ export function MainScreen({
 
   const [state, setState] = useState('NOT CONNECTED');
   const [progress, setProgress] = useState(0);
-  const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
   const [sending, setSending] = useState(false);
 
   const handleSyncWithEsp = async () => {
@@ -94,7 +91,6 @@ export function MainScreen({
   const handleRealBle = async () => {
     setProgress(0);
     setState('CONNECTING...');
-    setDeviceInfo(null);
 
     try {
       const d = await ble.scanAndConnect();
@@ -105,43 +101,10 @@ export function MainScreen({
 
       setProgress(100);
       setState('CONNECTED 👍');
-
-      try {
-        const info = await ble.readDeviceInfo();
-        setDeviceInfo(info);
-      } catch (infoError) {
-        console.log('[BLE] readDeviceInfo error:', infoError);
-        setDeviceInfo(null);
-      }
     } catch (error) {
       console.log('[BLE] Connection error:', error);
       setProgress(0);
       setState('DISCONNECTED');
-      setDeviceInfo(null);
-    }
-  };
-
-  const handleSendBleFile = async () => {
-    if (sending) return;
-
-    if (!selectedTtsPath) {
-      Alert.alert('No file', 'No TTS file selected.');
-      return;
-    }
-
-    try {
-      setSending(true);
-      await sendFileViaBle({
-        ble: ble,
-        filePath: selectedTtsPath,
-        setProgress,
-        setState,
-      });
-    } catch (e) {
-      console.error('[BLE FILE][ERROR]', e);
-      setState('ERROR');
-    } finally {
-      setSending(false);
     }
   };
 
@@ -157,10 +120,6 @@ export function MainScreen({
         <Text style={[styles.info, { color: colors.text }]}>
           {state}
         </Text>
-
-        {deviceInfo && (
-          <DeviceInfo info={deviceInfo} colors={colors} />
-        )}
       </View>
 
       {/* ===== REMINDER LIST ===== */}
@@ -190,17 +149,17 @@ export function MainScreen({
       {/* ===== DEBUG PANEL ===== */}
       <View style={styles.debug}>
         <PrimaryButton
-          title="Connexion BLE"
+          title="Connexion BLE (manuel)"
           onPress={handleRealBle}
           color={colors.inputBorder}
           textColor={colors.text}
         />
 
         <PrimaryButton
-        title="Générer les Mémos"
+        title="Générer Mémos (manuel)"
         onPress={handleGenerateMemo}
-        color={colors.accent}
-        textColor={colors.buttonText}
+        color={colors.inputBorder}
+        textColor={colors.text}
         />
 
         <ProgressBar
@@ -213,20 +172,6 @@ export function MainScreen({
         <Text style={[styles.info, { color: colors.text }]}>
           {progress} %
         </Text>
-
-        <PrimaryButton
-          title="Fichiers audio (TTS)"
-          onPress={onOpenFiles}
-          color={colors.inputBorder}
-          textColor={colors.text}
-        />
-
-        <PrimaryButton
-          title="Envoyer audio sélectionné"
-          onPress={handleSendBleFile}
-          color={colors.inputBorder}
-          textColor={colors.text}
-        />
       </View>
     </View>
   );

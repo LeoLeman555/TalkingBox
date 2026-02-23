@@ -15,7 +15,7 @@ import { formatRecurrenceHuman, formatSyncStatus } from '../utils/recurrenceForm
 import { deleteReminderService } from '../services/reminder/reminderDeletionService';
 import RNFS from 'react-native-fs';
 import { Alert } from 'react-native';
-import { TtsService } from '../services/TtsService';
+import { TtsService } from '../services/tts/ttsService';
 import { Pressable } from 'react-native';
 
 type Props = {

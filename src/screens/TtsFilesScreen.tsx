@@ -10,7 +10,7 @@ import {
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { getColors } from '../theme/colors';
-import { listTtsAudioFiles } from '../utils/ttsFileSystem';
+import { listTtsAudioFiles } from '../services/tts/ttsFileSystem';
 
 type Props = {
   selectedTtsPath: string | null;

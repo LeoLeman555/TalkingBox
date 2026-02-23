@@ -42,8 +42,9 @@ class BleService:
         self._chunk_queue = []
         self._has_pending_chunk = False
 
-
         self._setup()
+        self._emit_state("booting")
+        self._emit_state("idle")
 
     # ---------- Setup ----------
 
@@ -113,7 +114,13 @@ class BleService:
             return
 
         if len(raw) < 18 or raw[0] != 0x01:
-            self._notify({"event": "start_error", "msg": "invalid frame"})
+            self._emit_error(
+                subsystem="ble",
+                code="START_ERROR",
+                message="invalid_frame",
+                fatal=True
+            )
+            self._emit_state("error")
             return
 
         total_chunks = (raw[1] << 8) | raw[2]
@@ -132,7 +139,13 @@ class BleService:
         expected_len = 10 + filename_length + 8
 
         if len(raw) != expected_len:
-            self._notify({"event": "start_error", "msg": "bad length"})
+            self._emit_error(
+                subsystem="ble",
+                code="PROTOCOL_ERROR",
+                message="bad_length",
+                fatal=True
+            )
+            self._emit_state("error")
             return
 
         filename_bytes = raw[10:10 + filename_length]
@@ -144,7 +157,13 @@ class BleService:
         ).decode()
 
         if total_size <= 0 or total_size > self.MAX_FILE_SIZE:
-            self._notify({"event": "start_error", "msg": "invalid size"})
+            self._emit_error(
+                subsystem="storage",
+                code="INVALID_STATE",
+                message="invalid_size",
+                fatal=True
+            )
+            self._emit_state("error")
             return
 
         self.metadata = {
@@ -163,16 +182,23 @@ class BleService:
 
         print("[BLE] START OK:", filename)
 
-        self._notify({"event": "start_ack"})
+        self._emit_state("receiving")
 
     def _on_chunk_write(self):
         raw = self.ble.gatts_read(self._handle_chunk)
         seq = int.from_bytes(raw[0:4], "big")
         payload = raw[4:]
 
+        print("Chunk len:", len(raw))
+
         if seq != self.expected_seq:
             print("[BLE] seq error", seq, self.expected_seq)
-            self._notify({"event": "chunk_error", "msg": "seq mismatch"})
+            self._emit_error(
+                subsystem="ble",
+                code="SEQ_MISMATCH",
+                fatal=True
+            )
+            self._emit_state("error")
             return
 
         # Queue chunk instead of writing in IRQ
@@ -182,20 +208,41 @@ class BleService:
         self.bytes_written += len(payload)
         self.expected_seq += 1
 
-        if seq % 2 == 0:
-            self._notify({'event': 'ack', 'seq': seq})
+        self._emit_progress(
+            subsystem="storage",
+            current=self.expected_seq,
+            total=self.metadata["total_chunks"],
+        )
 
     def finalize_file(self):
-        calc = self.storage.finalize_temp_file(self.metadata["filename"])
+        if not self.metadata:
+            self._emit_error(
+                subsystem="storage",
+                code="INVALID_STATE",
+                fatal=True
+            )
+            self._emit_state("error")
+            return
+        
+        self._emit_state("verifying")
+
+        calc = self.storage.finalize_temp_file(
+            self.metadata["filename"]
+        )
 
         if not calc.startswith(self.metadata["sha256_short"]):
-            self._notify({"event": "hash_mismatch"})
+            self._emit_error(
+                subsystem="storage",
+                code="HASH_MISMATCH",
+                fatal=True
+            )
+            self._emit_state("error")
             return
 
-        self._notify({"event": "stored", "sha256": calc})
+        self._emit_state("ready", sha256=calc)
+
         self.metadata = None
         self.bytes_written = 0
-        print("[BLE] File finalised")
 
     def has_pending_chunk(self):
         return self._has_pending_chunk
@@ -222,3 +269,46 @@ class BleService:
                 self._handle_status,
                 json.dumps(obj),
             )
+
+    def _emit_state(self, state, sha256=None):
+        payload = {
+            "type": "state",
+            "state": state,
+        }
+        if state == "ready" and sha256:
+            payload["sha256"] = sha256
+        self._notify(payload)
+
+
+    def _emit_error(self, subsystem, code, message=None, fatal=True):
+        payload = {
+            "type": "error",
+            "subsystem": subsystem,
+            "code": code,
+            "fatal": fatal,
+        }
+        if message:
+            payload["message"] = message
+        self._notify(payload)
+
+
+    def _emit_progress(self, subsystem, current, total):
+        self._notify({
+            "type": "progress",
+            "subsystem": subsystem,
+            "current": current,
+            "total": total,
+        })
+
+
+    def _emit_telemetry(self, battery=None, rtc=None, audio=None, storage=None):
+        payload = {"type": "telemetry"}
+        if battery:
+            payload["battery"] = battery
+        if rtc:
+            payload["rtc"] = rtc
+        if audio:
+            payload["audio"] = audio
+        if storage:
+            payload["storage"] = storage
+        self._notify(payload)

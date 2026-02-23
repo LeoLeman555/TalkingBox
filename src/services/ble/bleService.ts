@@ -1,18 +1,14 @@
-import { BleManager, Device } from 'react-native-ble-plx';
+import { BleManager, Device, Subscription } from 'react-native-ble-plx';
 import { Buffer } from 'buffer';
+import {
+  parseEspStatus,
+  EspStatusMessage,
+} from '../../domain/espStatus'
 
 const SERVICE_UUID = '12345678-1234-5678-1234-56789abcdef0';
 const CHAR_START = '12345678-1234-5678-1234-56789abcdef1';
 const CHAR_CHUNK = '12345678-1234-5678-1234-56789abcdef2';
 const CHAR_STATUS = '12345678-1234-5678-1234-56789abcdef3';
-
-export interface BleDeviceInfo {
-  name: string | null;
-  id: string;
-  mtu: number;
-  rssi: number | null;
-  firmwareVersion: string | null;
-}
 
 export class BleService {
   private manager = new BleManager();
@@ -47,20 +43,21 @@ export class BleService {
         if (
           device.name.includes('ESP32') ||
           device.name.includes('BOX') ||
-          device.localName === 'TALKING BOX'
+          device.name.includes('MEMO') ||
+          device.name.includes('TALKING')
         ) {
           this.manager.stopDeviceScan();
           clearTimeout(timer);
           console.log('[BLE] Device found:', device.name);
 
           try {
-            const d = await device.connect();
-            await d.discoverAllServicesAndCharacteristics();
-            this.connected = d;
+          const d = await device.connect();
+          await d.discoverAllServicesAndCharacteristics();
+          this.connected = d;
 
             console.log('[BLE] Connected');
 
-            try {
+          try {
               const mtuValue = Number(await d.requestMTU(512));
               if (!isNaN(mtuValue)) {
                 // Reserve 20 bytes for BLE header, max payload = MTU - 20
@@ -71,15 +68,15 @@ export class BleService {
                   'chunkSize:',
                   this.chunkSize,
                 );
-              }
-            } catch {
+            }
+          } catch {
               console.log(
                 '[BLE] MTU negotiation failed, using default chunkSize',
                 this.chunkSize,
               );
-            }
+          }
 
-            resolve(d);
+          resolve(d);
           } catch (e: any) {
             console.log('[BLE] Connection error:', e.message);
             reject(e);
@@ -140,13 +137,13 @@ export class BleService {
       shaShortHex,
     });
   }
-
+  
   /** Send END frame. */
   async sendEnd() {
     if (!this.connected) throw new Error('Not connected');
-
+    
     const buf = Buffer.from([0x02]);
-
+    
     await this.connected.writeCharacteristicWithResponseForService(
       SERVICE_UUID,
       CHAR_START,
@@ -155,7 +152,7 @@ export class BleService {
 
     console.log('[BLE] END sent (binary)');
   }
-
+  
   /** Send single chunk with sequence number. */
   async writeChunk(seq: number, payload: Uint8Array) {
     if (!this.connected) throw new Error('Not connected');
@@ -169,82 +166,34 @@ export class BleService {
       CHAR_CHUNK,
       buf.toString('base64'),
     );
-
-    if (seq % 64 === 0) {
-      console.log('[BLE] chunk sent', seq);
-    }
   }
 
-  /** Subscribe to STATUS notifications. */
-  async subscribeStatus(cb: (obj: any) => void) {
+  async subscribeStatus(
+    cb: (msg: EspStatusMessage) => void,
+  ): Promise<Subscription> {
     if (!this.connected) throw new Error('Not connected');
-
-    console.log('[BLE] Subscribe STATUS');
-
+    
     return this.connected.monitorCharacteristicForService(
       SERVICE_UUID,
       CHAR_STATUS,
-      (err, char) => {
-        if (err) {
-        console.log('[BLE] STATUS error:', err.message);
-        return;
-      }
-      if (!char?.value) return;
-
-
+      (error, characteristic) => {
+        if (error || !characteristic?.value) return;
+        
         try {
-          const json = Buffer.from(char.value, 'base64').toString('utf8');
-          cb(JSON.parse(json));
-        } catch (e) {
-          console.log('[BLE] STATUS parse error', e);
+          const decoded = Buffer
+          .from(characteristic.value, 'base64')
+          .toString('utf8');
+          
+          const raw = JSON.parse(decoded);
+          const parsed = parseEspStatus(raw);
+          
+          if (parsed) {
+            cb(parsed);
+          }
+        } catch {
+          // ignore malformed frames
         }
       },
     );
-  }
-
-  /** Read firmware version from STATUS characteristic. */
-  async getFirmwareVersion(): Promise<string | null> {
-    if (!this.connected) return null;
-
-    try {
-      const c = await this.connected.readCharacteristicForService(
-        SERVICE_UUID,
-        CHAR_STATUS,
-      );
-      if (!c?.value) return null;
-
-      const decoded = Buffer.from(c.value, 'base64').toString('utf8');
-      const obj = JSON.parse(decoded);
-      return typeof obj.firmware === 'string' ? obj.firmware : null;
-    } catch {
-      return null;
-    }
-  }
-
-  /** Read device info including RSSI and firmware. */
-  async readDeviceInfo(): Promise<BleDeviceInfo> {
-    if (!this.connected) throw new Error('Not connected');
-
-    const d = this.connected;
-    console.log('[BLE] Read device info');
-
-    let rssi: number | null = null;
-    try {
-      const updated = await d.readRSSI();
-      rssi = updated.rssi ?? null;
-      console.log('[BLE] RSSI:', rssi);
-    } catch {
-      console.log('[BLE] RSSI read failed');
-    }
-
-    const firmware = await this.getFirmwareVersion().catch(() => null);
-
-    return {
-      name: d.name ?? null,
-      id: d.id,
-      mtu: this.chunkSize + 20,
-      rssi,
-      firmwareVersion: firmware,
-    };
   }
 }

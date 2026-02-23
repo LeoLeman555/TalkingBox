@@ -1,4 +1,4 @@
-import { BleService } from '../BleService';
+import { BleService } from './bleService';
 import { sendFileViaBle } from '../ble/sendFileViaBle';
 import { prepareSyncFiles } from './prepareSyncFiles';
 import { delay } from '../../utils/delay';
