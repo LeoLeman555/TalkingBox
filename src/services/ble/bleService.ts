@@ -1,4 +1,4 @@
-import { BleManager, Device, Subscription } from 'react-native-ble-plx';
+import { BleManager, Device, Subscription, State } from 'react-native-ble-plx';
 import { Buffer } from 'buffer';
 import {
   parseEspStatus,
@@ -11,16 +11,39 @@ const CHAR_CHUNK = '12345678-1234-5678-1234-56789abcdef2';
 const CHAR_STATUS = '12345678-1234-5678-1234-56789abcdef3';
 
 export class BleService {
+  public chunkSize = 480;
   private manager = new BleManager();
   private connected: Device | null = null;
+  private bleState!: State;
+  public onBleReady?: () => void;
 
-  public chunkSize = 480;
+  constructor() {
+    this.manager.onStateChange((state: State) => {
+      this.bleState = state;
+      if (state === 'PoweredOn' && !this.connected) {
+        console.log('[BLE] PoweredOn → ready to scan');
+        this.onBleReady?.();
+      }
+    }, true); // trigger immediately with current state
+  }
 
-  public isConnected(): boolean {
+  get getBleState(): any {
+    return this.bleState
+  }
+
+  get isConnected(): boolean {
     return this.connected !== null;
   }
 
-  async scanAndConnect(timeoutMs = 8000): Promise<Device> {
+  async scanAndConnect(timeoutMs = 8000): Promise<Device | null> {
+    if (this.connected) {
+      return this.connected;
+    }
+
+    if (this.bleState !== 'PoweredOn') {
+      throw new Error('Bluetooth is OFF');
+    }
+
     console.log('[BLE] Start scan');
 
     return new Promise((resolve, reject) => {
@@ -51,13 +74,13 @@ export class BleService {
           console.log('[BLE] Device found:', device.name);
 
           try {
-          const d = await device.connect();
-          await d.discoverAllServicesAndCharacteristics();
-          this.connected = d;
+            const d = await device.connect();
+            await d.discoverAllServicesAndCharacteristics();
+            this.connected = d;
 
             console.log('[BLE] Connected');
 
-          try {
+            try {
               const mtuValue = Number(await d.requestMTU(512));
               if (!isNaN(mtuValue)) {
                 // Reserve 20 bytes for BLE header, max payload = MTU - 20
@@ -68,15 +91,15 @@ export class BleService {
                   'chunkSize:',
                   this.chunkSize,
                 );
-            }
-          } catch {
+              }
+            } catch {
               console.log(
                 '[BLE] MTU negotiation failed, using default chunkSize',
                 this.chunkSize,
               );
-          }
+            }
 
-          resolve(d);
+            resolve(d);
           } catch (e: any) {
             console.log('[BLE] Connection error:', e.message);
             reject(e);
@@ -137,7 +160,7 @@ export class BleService {
       shaShortHex,
     });
   }
-  
+
   /** Send END frame. */
   async sendEnd() {
     if (!this.connected) throw new Error('Not connected');
@@ -172,13 +195,13 @@ export class BleService {
     cb: (msg: EspStatusMessage) => void,
   ): Promise<Subscription> {
     if (!this.connected) throw new Error('Not connected');
-    
+
     return this.connected.monitorCharacteristicForService(
       SERVICE_UUID,
       CHAR_STATUS,
       (error, characteristic) => {
         if (error || !characteristic?.value) return;
-        
+
         try {
           const decoded = Buffer
           .from(characteristic.value, 'base64')
@@ -195,5 +218,12 @@ export class BleService {
         }
       },
     );
+  }
+
+  async disconnect() {
+    if (this.connected) {
+      await this.connected.cancelConnection();
+      this.connected = null;
+    }
   }
 }

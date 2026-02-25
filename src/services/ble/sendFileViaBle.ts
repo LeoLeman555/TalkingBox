@@ -7,14 +7,14 @@ type SendFileContext = {
   ble: BleService;
   filePath: string;
   setProgress: (v: number) => void;
-  setState: (v: string) => void;
+  onEspMessage: (msg: EspStatusMessage) => void;
 };
 
 export async function sendFileViaBle({
   ble,
   filePath,
   setProgress,
-  setState,
+  onEspMessage,
 }: SendFileContext): Promise<void> {
   const filename = filePath.split('/').pop();
   if (!filename) throw new Error('Invalid file path');
@@ -25,15 +25,14 @@ export async function sendFileViaBle({
   let failed = false;
 
   await ble.subscribeStatus((msg: EspStatusMessage) => {
+    onEspMessage(msg);
+
     switch (msg.type) {
       case 'state':
         espState = msg.state;
-        setState(msg.state.toUpperCase());
-
         if (msg.state === 'ready') {
           setProgress(100);
         }
-
         if (msg.state === 'error') {
           failed = true;
         }
@@ -50,16 +49,12 @@ export async function sendFileViaBle({
 
       case 'error':
         failed = msg.fatal;
-        setState(`ERROR_${msg.code}`);
         break;
 
       case 'telemetry':
-        // Optional handling
         break;
     }
   });
-
-  setState('SEND_START');
 
   await ble.writeStartBinary(
     meta.size,
@@ -78,8 +73,6 @@ export async function sendFileViaBle({
     await delay(50);
   }
 
-  setState('SEND_CHUNKS');
-
   for await (const { seq, payload } of chunkFile(
     filePath,
     ble.chunkSize,
@@ -88,7 +81,6 @@ export async function sendFileViaBle({
     await ble.writeChunk(seq, payload);
   }
 
-  setState('SEND_END');
   await ble.sendEnd();
 
   const finalTimeout = Date.now();
@@ -100,6 +92,4 @@ export async function sendFileViaBle({
     }
     await delay(100);
   }
-
-  setState('DONE');
 }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Text,
   StyleSheet,
@@ -18,6 +18,13 @@ import { generateMemoFile } from '../services/memo/memoRepository';
 import RNFS from 'react-native-fs';
 import { syncWithEsp } from '../services/ble/syncWithEsp';
 import { Reminder } from '../domain/reminder';
+import { EspStatusMessage } from '../domain/espStatus';
+
+import {
+  SystemSnapshot,
+  createInitialSystemSnapshot,
+  computeGlobalSystemState,
+} from '../domain/systemStatus';
 
 const ble = new BleService();
 
@@ -39,94 +46,188 @@ export function MainScreen({
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
-  const [state, setState] = useState('NOT CONNECTED');
+  const [snapshot, setSnapshot] = useState<SystemSnapshot>(
+    createInitialSystemSnapshot(),
+  );
   const [progress, setProgress] = useState(0);
-  const [sending, setSending] = useState(false);
 
-  const handleSyncWithEsp = async () => {
-    if (sending) return;
+  const globalState = computeGlobalSystemState(snapshot);
+
+  const systemLabel: Record<typeof globalState, string> = {
+    offline: 'Offline',
+    booting: 'Démarrage...',
+    busy: 'En cours...',
+    ready: 'Prêt',
+    degraded: 'Problème détecté',
+    error: 'Erreur',
+  };
+
+  /**
+   * Apply ESP runtime messages to the system snapshot.
+   */
+  const applyEspMessage = useCallback((msg: EspStatusMessage) => {
+    setSnapshot(prev => {
+      switch (msg.type) {
+        case 'state':
+          return {
+            ...prev,
+            espState: msg.state,
+            lastEspError:
+              msg.state === 'error' ? prev.lastEspError : null,
+            updatedAt: Date.now(),
+          };
+
+        case 'error':
+          return {
+            ...prev,
+            lastEspError: msg,
+            updatedAt: Date.now(),
+          };
+
+        case 'telemetry':
+          return {
+            ...prev,
+            telemetry: msg,
+            updatedAt: Date.now(),
+          };
+
+        case 'progress':
+          return prev;
+
+        default:
+          return prev;
+      }
+    });
+  }, []);
+
+  /**
+   * Automatic BLE connection.
+   */
+  const connectBle = useCallback(async () => {
+    if (ble.isConnected) {
+      setSnapshot(s => ({
+        ...s,
+        ble: 'connected',
+        espState: 'ready',
+        lastEspError: null,
+        bleError: null,
+        updatedAt: Date.now(),
+      }));
+      console.log("BLE test");
+      return;
+    }
+
+    if (ble.getBleState !== 'PoweredOn') {
+      Alert.alert('Info', 'Please activate Bluetooth');
+      return
+    }
+
+    if (snapshot.ble === 'connecting') {
+      return;
+    }
+
+    setSnapshot(s => ({
+      ...s,
+      ble: 'connecting',
+      bleError: null,
+      updatedAt: Date.now(),
+    }));
 
     try {
-      setSending(true);
+      const device = await ble.scanAndConnect();
+
+      if (!device) {
+        setSnapshot(s => ({
+          ...s,
+          ble: 'disconnected',
+          updatedAt: Date.now(),
+        }));
+        return;
+      }
+
+      setSnapshot(s => ({
+        ...s,
+        ble: 'connected',
+        espState: 'ready',
+        lastEspError: null,
+        bleError: null,
+        updatedAt: Date.now(),
+      }));
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : String(err);
+
+      setSnapshot(s => ({
+        ...s,
+        ble: 'disconnected',
+        bleError: {
+          code: 'DISCONNECTED',
+          fatal: false,
+          message,
+        },
+        updatedAt: Date.now(),
+      }));
+    }
+  }, [snapshot.ble]);
+
+  /**
+   * Auto-connect BLE on mount and after disconnection
+   * (unless an error is already present).
+   */
+  useEffect(() => {
+    ble.onBleReady = () => connectBle();
+    if (snapshot.ble === 'disconnected' && !snapshot.bleError) connectBle();
+    return () => { ble.onBleReady = undefined; };
+  }, [snapshot.ble, snapshot.bleError, connectBle]);
+
+  const handleSyncWithEsp = async () => {
+    try {
       setProgress(0);
-      setState('SYNC START');
 
       await syncWithEsp({
         ble,
         setProgress,
-        setState,
+        onEspMessage: applyEspMessage,
       });
 
       Alert.alert('Success', 'Synchronization completed successfully');
     } catch (error) {
-      console.error('[SYNC][ERROR]', error);
-      setState('SYNC ERROR');
       Alert.alert('Error', String(error));
-    } finally {
-      setSending(false);
     }
   };
 
   const handleGenerateMemo = async () => {
     try {
-      setState('GENERATING MEMO...');
       setProgress(0);
 
       const memoPath = await generateMemoFile();
-
       const content = await RNFS.readFile(memoPath, 'utf8');
+
       console.log('[MEMO GENERATED]', content);
 
       setProgress(100);
-      setState('MEMO GENERATED');
-      
       Alert.alert('Success', `Memo generated at:\n${memoPath}`);
     } catch (error) {
-      console.error('[MEMO][ERROR]', error);
-      setState('MEMO ERROR');
       Alert.alert('Error', String(error));
-    }
-  };
-
-  const handleRealBle = async () => {
-    setProgress(0);
-    setState('CONNECTING...');
-
-    try {
-      const d = await ble.scanAndConnect();
-      if (!d) {
-        setState('DISCONNECTED');
-        return;
-      }
-
-      setProgress(100);
-      setState('CONNECTED 👍');
-    } catch (error) {
-      console.log('[BLE] Connection error:', error);
-      setProgress(0);
-      setState('DISCONNECTED');
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      
-      {/* ===== HEADER SYSTEM ===== */}
+      {/* ===== HEADER ===== */}
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>
           Talking Box - Prototype
         </Text>
 
         <Text style={[styles.info, { color: colors.text }]}>
-          {state}
+          {systemLabel[globalState]}
         </Text>
       </View>
 
       {/* ===== REMINDER LIST ===== */}
       <View style={styles.listContainer}>
-        <ReminderList
-          onSelect={onEditReminder}
-        />
+        <ReminderList onSelect={onEditReminder} />
       </View>
 
       {/* ===== FOOTER ===== */}
@@ -146,20 +247,13 @@ export function MainScreen({
         />
       </View>
 
-      {/* ===== DEBUG PANEL ===== */}
+      {/* ===== DEBUG ===== */}
       <View style={styles.debug}>
         <PrimaryButton
-          title="Connexion BLE (manuel)"
-          onPress={handleRealBle}
+          title="Générer Mémos (manuel)"
+          onPress={handleGenerateMemo}
           color={colors.inputBorder}
           textColor={colors.text}
-        />
-
-        <PrimaryButton
-        title="Générer Mémos (manuel)"
-        onPress={handleGenerateMemo}
-        color={colors.inputBorder}
-        textColor={colors.text}
         />
 
         <ProgressBar
