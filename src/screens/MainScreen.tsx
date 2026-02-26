@@ -13,9 +13,7 @@ import { ReminderList } from '../components/reminder/ReminderList';
 
 import { useBlePermissions } from '../hooks/useBlePermissions';
 import { BleService } from '../services/ble/bleService';
-import { getColors } from '../theme/colors';
-import { generateMemoFile } from '../services/memo/memoRepository';
-import RNFS from 'react-native-fs';
+import { getColors, getStateColor, getEspColor, getBleColor } from '../utils/colors';
 import { syncWithEsp } from '../services/ble/syncWithEsp';
 import { Reminder } from '../domain/reminder';
 import { EspStatusMessage } from '../domain/espStatus';
@@ -116,7 +114,7 @@ export function MainScreen({
       console.log("BLE test");
       return;
     }
-
+    
     if (ble.getBleState !== 'PoweredOn') {
       Alert.alert('Info', 'Please activate Bluetooth');
       return
@@ -196,22 +194,6 @@ export function MainScreen({
     }
   };
 
-  const handleGenerateMemo = async () => {
-    try {
-      setProgress(0);
-
-      const memoPath = await generateMemoFile();
-      const content = await RNFS.readFile(memoPath, 'utf8');
-
-      console.log('[MEMO GENERATED]', content);
-
-      setProgress(100);
-      Alert.alert('Success', `Memo generated at:\n${memoPath}`);
-    } catch (error) {
-      Alert.alert('Error', String(error));
-    }
-  };
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* ===== HEADER ===== */}
@@ -220,9 +202,73 @@ export function MainScreen({
           Talking Box - Prototype
         </Text>
 
-        <Text style={[styles.info, { color: colors.text }]}>
-          {systemLabel[globalState]}
-        </Text>
+        {/* Global state badge */}
+        <View
+          style={[
+            styles.stateBadge,
+            { backgroundColor: getStateColor(globalState) },
+          ]}
+        >
+          <Text style={styles.stateBadgeText}>
+            {systemLabel[globalState]}
+          </Text>
+        </View>
+
+        {/* Technical line */}
+        <View style={styles.techContainer}>
+          <View style={styles.techItem}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: getBleColor(snapshot.ble) },
+              ]}
+            />
+            <Text style={[styles.techLabel, { color: colors.text }]}>
+              BLUETOOTH
+            </Text>
+            <Text style={[styles.techValue, { color: colors.text }]}>
+              {snapshot.ble.toUpperCase()}
+            </Text>
+          </View>
+          
+          <View style={styles.techItem}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: getEspColor(snapshot.espState) },
+              ]}
+            />
+            <Text style={[styles.techLabel, { color: colors.text }]}>
+              MEMO
+            </Text>
+            <Text style={[styles.techValue, { color: colors.text }]}>
+              {(snapshot.espState ?? 'idle').toUpperCase()}
+            </Text>
+          </View>
+
+          {/* Error indicator */}
+          {(snapshot.lastEspError || snapshot.bleError) && (
+            <View style={styles.errorBadge}>
+              <Text style={styles.errorBadgeText}>
+                ERROR
+              </Text>
+            </View>
+          )}
+
+        </View>
+
+        {/* Activity indicator */}
+        {globalState === 'busy' && (
+          <View style={styles.headerProgress}>
+            <ProgressBar
+              progress={progress}
+              height={6}
+              backgroundColor={colors.inputBorder}
+              fillColor={colors.accent}
+            />
+          </View>
+        )}
+
       </View>
 
       {/* ===== REMINDER LIST ===== */}
@@ -245,27 +291,6 @@ export function MainScreen({
           color={colors.accent}
           textColor={colors.buttonText}
         />
-      </View>
-
-      {/* ===== DEBUG ===== */}
-      <View style={styles.debug}>
-        <PrimaryButton
-          title="Générer Mémos (manuel)"
-          onPress={handleGenerateMemo}
-          color={colors.inputBorder}
-          textColor={colors.text}
-        />
-
-        <ProgressBar
-          progress={progress}
-          height={14}
-          backgroundColor={colors.inputBorder}
-          fillColor={colors.accent}
-        />
-
-        <Text style={[styles.info, { color: colors.text }]}>
-          {progress} %
-        </Text>
       </View>
     </View>
   );
@@ -299,4 +324,79 @@ const styles = StyleSheet.create({
   debug: {
     paddingTop: 12,
   },
+  stateBadge: {
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  stateBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  techLine: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 8,
+  },
+  techText: {
+    fontSize: 13,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#E74C3C',
+  },
+  headerProgress: {
+    marginTop: 8,
+  },
+  techContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    gap: 12,
+},
+
+techItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 16,
+  backgroundColor: 'rgba(0,0,0,0.05)',
+},
+
+statusDot: {
+  width: 8,
+  height: 8,
+  borderRadius: 4,
+  marginRight: 6,
+},
+
+techLabel: {
+  fontSize: 12,
+  fontWeight: '600',
+  marginRight: 4,
+},
+
+techValue: {
+  fontSize: 12,
+  fontWeight: '500',
+},
+
+errorBadge: {
+  paddingHorizontal: 10,
+  paddingVertical: 5,
+  borderRadius: 14,
+  backgroundColor: '#E74C3C',
+},
+
+errorBadgeText: {
+  color: '#FFFFFF',
+  fontSize: 11,
+  fontWeight: '700',
+},
 });

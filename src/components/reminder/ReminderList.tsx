@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 
-import { getColors } from '../../theme/colors';
+import { getColors } from '../../utils/colors';
 import { getAllReminders } from '../../services/reminder/reminderRepository';
 import { Reminder } from '../../domain/reminder';
 

@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 
 import { PrimaryButton } from '../components/PrimaryButton';
-import { getColors } from '../theme/colors';
+import { getColors } from '../utils/colors';
 import { listTtsAudioFiles } from '../services/tts/ttsFileSystem';
 
 type Props = {
