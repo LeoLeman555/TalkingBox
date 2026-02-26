@@ -101,71 +101,79 @@ export function MainScreen({
   /**
    * Automatic BLE connection.
    */
-  const connectBle = useCallback(async () => {
-    if (ble.isConnected) {
-      setSnapshot(s => ({
-        ...s,
-        ble: 'connected',
-        espState: 'ready',
-        lastEspError: null,
-        bleError: null,
-        updatedAt: Date.now(),
-      }));
-      console.log("BLE test");
-      return;
-    }
-    
-    if (ble.getBleState !== 'PoweredOn') {
-      Alert.alert('Info', 'Please activate Bluetooth');
-      return
-    }
+  const connectBle = useCallback(
+    async (fromUser: boolean = false) => {
+      const bleState = ble.getBluetoothState();
 
-    if (snapshot.ble === 'connecting') {
-      return;
-    }
+      if (
+        fromUser &&
+        bleState === 'PoweredOff'
+      ) {
+        Alert.alert(
+          'Bluetooth désactivé',
+          'Veuillez activer le Bluetooth dans les paramètres Android.',
+        );
+        return;
+      }
 
-    setSnapshot(s => ({
-      ...s,
-      ble: 'connecting',
-      bleError: null,
-      updatedAt: Date.now(),
-    }));
-
-    try {
-      const device = await ble.scanAndConnect();
-
-      if (!device) {
+      if (await ble.isDeviceConnected()) {
         setSnapshot(s => ({
           ...s,
-          ble: 'disconnected',
+          ble: 'connected',
+          espState: 'ready',
+          lastEspError: null,
+          bleError: null,
           updatedAt: Date.now(),
         }));
         return;
       }
 
-      setSnapshot(s => ({
-        ...s,
-        ble: 'connected',
-        espState: 'ready',
-        lastEspError: null,
-        bleError: null,
-        updatedAt: Date.now(),
-      }));
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : String(err);
+      if (snapshot.ble === 'connecting') {
+        return;
+      }
 
       setSnapshot(s => ({
         ...s,
-        ble: 'disconnected',
-        bleError: {
-          code: 'DISCONNECTED',
-          fatal: false,
-          message,
-        },
+        ble: 'connecting',
+        bleError: null,
         updatedAt: Date.now(),
       }));
-    }
+
+      try {
+        const device = await ble.scanAndConnect();
+
+        if (!device) {
+          setSnapshot(s => ({
+            ...s,
+            ble: 'disconnected',
+            updatedAt: Date.now(),
+          }));
+          return;
+        }
+
+        setSnapshot(s => ({
+          ...s,
+          ble: 'connected',
+          espState: 'ready',
+          lastEspError: null,
+          bleError: null,
+          updatedAt: Date.now(),
+        }));
+      } catch (caught: unknown) {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+
+        setSnapshot(s => ({
+          ...s,
+          ble: 'disconnected',
+          bleError: {
+            code: 'DISCONNECTED',
+            fatal: false,
+            message,
+          },
+          updatedAt: Date.now(),
+        }));
+      }
   }, [snapshot.ble]);
 
   /**
@@ -173,12 +181,26 @@ export function MainScreen({
    * (unless an error is already present).
    */
   useEffect(() => {
-    ble.onBleReady = () => connectBle();
-    if (snapshot.ble === 'disconnected' && !snapshot.bleError) connectBle();
-    return () => { ble.onBleReady = undefined; };
+    ble.onBleReady = () => connectBle(false);
+
+    if (snapshot.ble === 'disconnected' && !snapshot.bleError) {
+      connectBle(false);
+    }
+
+    return () => {
+      ble.onBleReady = undefined;
+    };
   }, [snapshot.ble, snapshot.bleError, connectBle]);
 
   const handleSyncWithEsp = async () => {
+    if (!(await ble.isDeviceConnected())) {
+      Alert.alert(
+        'MEMO non connecté',
+        'Veuillez connecter MEMO avant la synchronisation.',
+      );
+      return;
+    }
+
     try {
       setProgress(0);
 

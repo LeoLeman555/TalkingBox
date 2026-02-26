@@ -14,7 +14,7 @@ export class BleService {
   public chunkSize = 480;
   private manager = new BleManager();
   private connected: Device | null = null;
-  private bleState!: State;
+  private bleState: State | null = null;
   public onBleReady?: () => void;
 
   constructor() {
@@ -24,20 +24,46 @@ export class BleService {
         console.log('[BLE] PoweredOn → ready to scan');
         this.onBleReady?.();
       }
-    }, true); // trigger immediately with current state
+    }, true);
   }
 
-  get getBleState(): any {
-    return this.bleState
+  isBluetoothEnabled(): boolean {
+    return this.bleState === 'PoweredOn';
   }
 
-  get isConnected(): boolean {
-    return this.connected !== null;
+  getBluetoothState(): State | null {
+    return this.bleState;
+  }
+
+  async isDeviceConnected(): Promise<boolean> {
+    if (!this.connected) return false;
+
+    try {
+      const connected = await this.connected.isConnected();
+
+      if (!connected) {
+        this.connected = null;
+        return false;
+      }
+
+      return true;
+    } catch {
+      this.connected = null;
+      return false;
+    }
   }
 
   async scanAndConnect(timeoutMs = 8000): Promise<Device | null> {
     if (this.connected) {
-      return this.connected;
+      const stillConnected = await this.connected.isConnected().catch(() => false);
+
+      if (stillConnected) {
+        console.log('[BLE] Already connected (verified)');
+        return this.connected;
+      }
+
+      console.log('[BLE] Ghost connection detected → cleanup');
+      this.connected = null;
     }
 
     if (this.bleState !== 'PoweredOn') {
@@ -77,6 +103,11 @@ export class BleService {
             const d = await device.connect();
             await d.discoverAllServicesAndCharacteristics();
             this.connected = d;
+
+            d.onDisconnected(() => {
+              console.log('[BLE] Device disconnected');
+              this.connected = null;
+            });
 
             console.log('[BLE] Connected');
 
