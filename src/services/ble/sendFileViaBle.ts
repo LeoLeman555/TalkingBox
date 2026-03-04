@@ -1,152 +1,95 @@
-import { BleService } from '../BleService';
-import { computeMeta, chunkFile } from '../../logic/FileChunker';
+import { BleService } from './bleService';
+import { computeMeta, chunkFile } from './fileChunker';
 import { delay } from '../../utils/delay';
-
-type SupportedFileType = 'wav' | 'json';
+import { EspStatusMessage } from '../../domain/espStatus';
 
 type SendFileContext = {
   ble: BleService;
   filePath: string;
   setProgress: (v: number) => void;
-  setState: (v: string) => void;
+  onEspMessage: (msg: EspStatusMessage) => void;
 };
-
-/** Detect supported file type from filename. */
-function detectFileType(filename: string): SupportedFileType {
-  const ext = filename.split('.').pop()?.toLowerCase();
-
-  if (ext === 'wav') return 'wav';
-  if (ext === 'json') return 'json';
-
-  throw new Error(`Unsupported file type: .${ext}`);
-}
 
 export async function sendFileViaBle({
   ble,
   filePath,
   setProgress,
-  setState,
+  onEspMessage,
 }: SendFileContext): Promise<void> {
-  let mounted = true;
-  let doneOrFailed = false;
+  const filename = filePath.split('/').pop();
+  if (!filename) throw new Error('Invalid file path');
 
-  try {
-    setProgress(0);
-    setState('PREP FILE');
-    console.log('[BLE FILE] Preparing file...');
+  const meta = await computeMeta(filePath, ble.chunkSize);
 
-    const filename = filePath.split('/').pop();
-    if (!filename) {
-      throw new Error('Invalid file path');
-    }
+  let espState: string | null = null;
+  let failed = false;
 
-    const fileType = detectFileType(filename);
-    console.log('[BLE FILE] File type:', fileType);
+  await ble.subscribeStatus((msg: EspStatusMessage) => {
+    onEspMessage(msg);
 
-    const meta = await computeMeta(filePath, ble.chunkSize);
-    console.log('[BLE FILE] File meta:', meta);
-
-    let startAck = false;
-    let done = false;
-    let failed = false;
-
-    // NOTE: Do not manually cancel BLE monitors on Android.
-    // react-native-ble-plx may crash when cancelTransaction is called
-    // while notifications are still being dispatched.
-
-    await ble.subscribeStatus(msg => {
-      if (!mounted || doneOrFailed) return;
-
-      console.log('[STATUS MSG]', msg);
-
-      switch (msg.event) {
-        case 'start_ack':
-          console.log('[STATUS] START ACK received');
-          startAck = true;
-          break;
-
-        case 'ack': {
-          const progress = Math.min(
-            100,
-            Math.floor((msg.seq / meta.totalChunks) * 100),
-          );
-          setProgress(progress);
-          break;
-        }
-
-        case 'stored':
-          console.log('[STATUS] File stored by ESP, SHA:', msg.sha256);
-          done = true;
-          doneOrFailed = true;
+    switch (msg.type) {
+      case 'state':
+        espState = msg.state;
+        if (msg.state === 'ready') {
           setProgress(100);
-          setState('DONE');
-          break;
-
-        case 'timeout':
-        case 'hash_mismatch':
-        case 'start_error':
-        case 'chunk_error':
-        case 'assemble_error':
-          console.error('[STATUS] ESP error:', msg);
+        }
+        if (msg.state === 'error') {
           failed = true;
-          doneOrFailed = true;
-          setState('ERROR');
-          break;
-      }
-    });
+        }
+        break;
 
-    // ---------- START ----------
-    setState('SEND START');
-    console.log('[BLE FILE] Sending START');
+      case 'progress':
+        if (msg.subsystem === 'storage') {
+          const percent = Math.floor(
+            (msg.current / msg.total) * 100,
+          );
+          setProgress(percent);
+        }
+        break;
 
-    await ble.writeStartBinary(
-      meta.size,
-      meta.sha256,
-      filename,
-      meta.totalChunks,
-    );
+      case 'error':
+        failed = msg.fatal;
+        break;
 
-    const startTimeout = Date.now();
-    setState('WAIT START ACK');
-
-    while (!startAck) {
-      if (failed) throw new Error('ESP rejected START');
-      if (Date.now() - startTimeout > 3000) {
-        throw new Error('START ACK timeout');
-      }
-      await delay(30);
+      case 'telemetry':
+        break;
     }
+  });
 
-    // ---------- CHUNKS ----------
-    setState('SEND CHUNKS');
-    console.log('[BLE FILE] Sending chunks...');
+  await ble.writeStartBinary(
+    meta.size,
+    meta.sha256,
+    filename,
+    meta.totalChunks,
+  );
 
-    for await (const { seq, payload } of chunkFile(filePath, ble.chunkSize)) {
-      if (failed) {
-        throw new Error('Transfer aborted');
-      }
-      await ble.writeChunk(seq, payload);
+  const startTimeout = Date.now();
+
+  while (espState !== 'receiving') {
+    if (failed) throw new Error('ESP error');
+    if (Date.now() - startTimeout > 5000) {
+      throw new Error('START timeout');
     }
+    await delay(50);
+  }
 
-    // ---------- END ----------
-    setState('SEND END');
-    await delay(200);
-    await ble.sendEnd();
+  for await (const { seq, payload } of chunkFile(
+    filePath,
+    ble.chunkSize,
+  )) {
+    if (failed) throw new Error('Transfer aborted');
+    await ble.writeChunk(seq, payload);
+  }
 
-    // ---------- FINAL ACK ----------
-    setState('WAIT ESP32');
-    const finalTimeout = Date.now();
+  await ble.sendEnd();
 
-    while (!done) {
-      if (failed) throw new Error('ESP failed storing file');
-      if (Date.now() - finalTimeout > 10000) {
-        throw new Error('ESP store timeout');
-      }
-      await delay(50);
+  const finalTimeout = Date.now();
+
+  while (espState !== 'ready') {
+    if (failed) throw new Error('ESP failed');
+    if (Date.now() - finalTimeout > 15000) {
+      throw new Error('Finalize timeout');
     }
-
-    console.log('[BLE FILE] Transfer completed successfully');
-  } finally {
-    mounted = false;
+    await delay(100);
   }
 }

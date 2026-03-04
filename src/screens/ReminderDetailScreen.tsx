@@ -9,13 +9,13 @@ import {
 
 import { Reminder } from '../domain/reminder';
 import { PrimaryButton } from '../components/PrimaryButton';
-import { getColors } from '../theme/colors';
+import { getColors } from '../utils/colors';
 import { formatDateHuman } from '../utils/dateFormat';
 import { formatRecurrenceHuman, formatSyncStatus } from '../utils/recurrenceFormat';
 import { deleteReminderService } from '../services/reminder/reminderDeletionService';
 import RNFS from 'react-native-fs';
 import { Alert } from 'react-native';
-import { TtsService } from '../services/TtsService';
+import { TtsService } from '../services/tts/ttsService';
 import { Pressable } from 'react-native';
 
 type Props = {
@@ -187,7 +187,7 @@ export function ReminderDetailScreen({ reminder, onBack }: Props) {
         <PrimaryButton
           title="Supprimer"
           onPress={handleDeleteReminder}
-          color={colors.warning}
+          color={colors.accent}
           textColor={colors.buttonText}
         />
 

@@ -2,6 +2,10 @@ apply plugin: "com.android.application"
 apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
+// Hermes flag
+project.ext.react = [enableHermes: true]
+def enableHermes = project.ext.react.get("enableHermes", false)
+
 /**
  * This is the configuration block to customize your React Native Android app.
  * By default you don't need to apply any configuration, just uncomment the lines you need.
@@ -57,7 +61,7 @@ react {
 /**
  * Set this to true to Run Proguard on Release builds to minify the Java bytecode.
  */
-def enableProguardInReleaseBuilds = false
+// def enableProguardInReleaseBuilds = false
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -78,6 +82,7 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.talkingboxapp"
+
     defaultConfig {
         applicationId "com.talkingboxapp"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -85,6 +90,7 @@ android {
         versionCode 1
         versionName "1.0"
     }
+
     signingConfigs {
         debug {
             storeFile file('debug.keystore')
@@ -93,12 +99,15 @@ android {
             keyPassword 'android'
         }
         release {
-            storeFile file(MYAPP_UPLOAD_STORE_FILE)
-            storePassword MYAPP_UPLOAD_STORE_PASSWORD
-            keyAlias MYAPP_UPLOAD_KEY_ALIAS
-            keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+            if (project.hasProperty("MYAPP_UPLOAD_STORE_FILE")) {
+                storeFile file(MYAPP_UPLOAD_STORE_FILE)
+                storePassword MYAPP_UPLOAD_STORE_PASSWORD
+                keyAlias MYAPP_UPLOAD_KEY_ALIAS
+                keyPassword MYAPP_UPLOAD_KEY_PASSWORD
+            }
         }
     }
+
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
@@ -114,8 +123,7 @@ android {
 dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
-
-    if (hermesEnabled.toBoolean()) {
+    if (enableHermes) {
         implementation("com.facebook.react:hermes-android")
     } else {
         implementation jscFlavor

@@ -9,8 +9,8 @@ import {
 } from 'react-native';
 
 import { PrimaryButton } from '../components/PrimaryButton';
-import { getColors } from '../theme/colors';
-import { listTtsAudioFiles } from '../utils/ttsFileSystem';
+import { getColors } from '../utils/colors';
+import { listTtsAudioFiles } from '../services/tts/ttsFileSystem';
 
 type Props = {
   selectedTtsPath: string | null;

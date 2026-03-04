@@ -1,30 +1,75 @@
-import { BleManager, Device } from 'react-native-ble-plx';
+import { BleManager, Device, Subscription, State } from 'react-native-ble-plx';
 import { Buffer } from 'buffer';
+import {
+  parseEspStatus,
+  EspStatusMessage,
+} from '../../domain/espStatus'
 
 const SERVICE_UUID = '12345678-1234-5678-1234-56789abcdef0';
 const CHAR_START = '12345678-1234-5678-1234-56789abcdef1';
 const CHAR_CHUNK = '12345678-1234-5678-1234-56789abcdef2';
 const CHAR_STATUS = '12345678-1234-5678-1234-56789abcdef3';
 
-export interface BleDeviceInfo {
-  name: string | null;
-  id: string;
-  mtu: number;
-  rssi: number | null;
-  firmwareVersion: string | null;
-}
-
 export class BleService {
+  public chunkSize = 480;
   private manager = new BleManager();
   private connected: Device | null = null;
+  private bleState: State | null = null;
+  public onBleReady?: () => void;
 
-  public chunkSize = 480;
-
-  public isConnected(): boolean {
-    return this.connected !== null;
+  constructor() {
+    this.manager.onStateChange((state: State) => {
+      this.bleState = state;
+      if (state === 'PoweredOn' && !this.connected) {
+        console.log('[BLE] PoweredOn → ready to scan');
+        this.onBleReady?.();
+      }
+    }, true);
   }
 
-  async scanAndConnect(timeoutMs = 8000): Promise<Device> {
+  isBluetoothEnabled(): boolean {
+    return this.bleState === 'PoweredOn';
+  }
+
+  getBluetoothState(): State | null {
+    return this.bleState;
+  }
+
+  async isDeviceConnected(): Promise<boolean> {
+    if (!this.connected) return false;
+
+    try {
+      const connected = await this.connected.isConnected();
+
+      if (!connected) {
+        this.connected = null;
+        return false;
+      }
+
+      return true;
+    } catch {
+      this.connected = null;
+      return false;
+    }
+  }
+
+  async scanAndConnect(timeoutMs = 8000): Promise<Device | null> {
+    if (this.connected) {
+      const stillConnected = await this.connected.isConnected().catch(() => false);
+
+      if (stillConnected) {
+        console.log('[BLE] Already connected (verified)');
+        return this.connected;
+      }
+
+      console.log('[BLE] Ghost connection detected → cleanup');
+      this.connected = null;
+    }
+
+    if (this.bleState !== 'PoweredOn') {
+      throw new Error('Bluetooth is OFF');
+    }
+
     console.log('[BLE] Start scan');
 
     return new Promise((resolve, reject) => {
@@ -47,7 +92,8 @@ export class BleService {
         if (
           device.name.includes('ESP32') ||
           device.name.includes('BOX') ||
-          device.localName === 'TALKING BOX'
+          device.name.includes('MEMO') ||
+          device.name.includes('TALKING')
         ) {
           this.manager.stopDeviceScan();
           clearTimeout(timer);
@@ -57,6 +103,11 @@ export class BleService {
             const d = await device.connect();
             await d.discoverAllServicesAndCharacteristics();
             this.connected = d;
+
+            d.onDisconnected(() => {
+              console.log('[BLE] Device disconnected');
+              this.connected = null;
+            });
 
             console.log('[BLE] Connected');
 
@@ -144,9 +195,9 @@ export class BleService {
   /** Send END frame. */
   async sendEnd() {
     if (!this.connected) throw new Error('Not connected');
-
+    
     const buf = Buffer.from([0x02]);
-
+    
     await this.connected.writeCharacteristicWithResponseForService(
       SERVICE_UUID,
       CHAR_START,
@@ -155,7 +206,7 @@ export class BleService {
 
     console.log('[BLE] END sent (binary)');
   }
-
+  
   /** Send single chunk with sequence number. */
   async writeChunk(seq: number, payload: Uint8Array) {
     if (!this.connected) throw new Error('Not connected');
@@ -169,82 +220,41 @@ export class BleService {
       CHAR_CHUNK,
       buf.toString('base64'),
     );
-
-    if (seq % 64 === 0) {
-      console.log('[BLE] chunk sent', seq);
-    }
   }
 
-  /** Subscribe to STATUS notifications. */
-  async subscribeStatus(cb: (obj: any) => void) {
+  async subscribeStatus(
+    cb: (msg: EspStatusMessage) => void,
+  ): Promise<Subscription> {
     if (!this.connected) throw new Error('Not connected');
-
-    console.log('[BLE] Subscribe STATUS');
 
     return this.connected.monitorCharacteristicForService(
       SERVICE_UUID,
       CHAR_STATUS,
-      (err, char) => {
-        if (err) {
-        console.log('[BLE] STATUS error:', err.message);
-        return;
-      }
-      if (!char?.value) return;
-
+      (error, characteristic) => {
+        if (error || !characteristic?.value) return;
 
         try {
-          const json = Buffer.from(char.value, 'base64').toString('utf8');
-          cb(JSON.parse(json));
-        } catch (e) {
-          console.log('[BLE] STATUS parse error', e);
+          const decoded = Buffer
+          .from(characteristic.value, 'base64')
+          .toString('utf8');
+          
+          const raw = JSON.parse(decoded);
+          const parsed = parseEspStatus(raw);
+          
+          if (parsed) {
+            cb(parsed);
+          }
+        } catch {
+          // ignore malformed frames
         }
       },
     );
   }
 
-  /** Read firmware version from STATUS characteristic. */
-  async getFirmwareVersion(): Promise<string | null> {
-    if (!this.connected) return null;
-
-    try {
-      const c = await this.connected.readCharacteristicForService(
-        SERVICE_UUID,
-        CHAR_STATUS,
-      );
-      if (!c?.value) return null;
-
-      const decoded = Buffer.from(c.value, 'base64').toString('utf8');
-      const obj = JSON.parse(decoded);
-      return typeof obj.firmware === 'string' ? obj.firmware : null;
-    } catch {
-      return null;
+  async disconnect() {
+    if (this.connected) {
+      await this.connected.cancelConnection();
+      this.connected = null;
     }
-  }
-
-  /** Read device info including RSSI and firmware. */
-  async readDeviceInfo(): Promise<BleDeviceInfo> {
-    if (!this.connected) throw new Error('Not connected');
-
-    const d = this.connected;
-    console.log('[BLE] Read device info');
-
-    let rssi: number | null = null;
-    try {
-      const updated = await d.readRSSI();
-      rssi = updated.rssi ?? null;
-      console.log('[BLE] RSSI:', rssi);
-    } catch {
-      console.log('[BLE] RSSI read failed');
-    }
-
-    const firmware = await this.getFirmwareVersion().catch(() => null);
-
-    return {
-      name: d.name ?? null,
-      id: d.id,
-      mtu: this.chunkSize + 20,
-      rssi,
-      firmwareVersion: firmware,
-    };
   }
 }

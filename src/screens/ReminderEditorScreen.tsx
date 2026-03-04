@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, useColorScheme, FlatList } from 'react-native';
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ReminderForm } from '../components/reminder/ReminderForm';
 import { useReminderEditor } from '../hooks/useReminderEditor';
-import { getColors } from '../theme/colors';
+import { getColors } from '../utils/colors';
 
 type Props = {
   onBack: () => void;

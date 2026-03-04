@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Text,
   StyleSheet,
@@ -9,17 +9,20 @@ import {
 
 import { PrimaryButton } from '../components/PrimaryButton';
 import { ProgressBar } from '../components/ProgressBar';
-import { DeviceInfo } from '../components/DeviceInfo';
 import { ReminderList } from '../components/reminder/ReminderList';
 
 import { useBlePermissions } from '../hooks/useBlePermissions';
-import { BleService, BleDeviceInfo } from '../services/BleService';
-import { sendFileViaBle } from '../services/ble/sendFileViaBle';
-import { getColors } from '../theme/colors';
-import { generateMemoFile } from '../services/memo/memoRepository';
-import RNFS from 'react-native-fs';
+import { BleService } from '../services/ble/bleService';
+import { getColors, getStateColor, getEspColor, getBleColor } from '../utils/colors';
 import { syncWithEsp } from '../services/ble/syncWithEsp';
 import { Reminder } from '../domain/reminder';
+import { EspStatusMessage } from '../domain/espStatus';
+
+import {
+  SystemSnapshot,
+  createInitialSystemSnapshot,
+  computeGlobalSystemState,
+} from '../domain/systemStatus';
 
 const ble = new BleService();
 
@@ -31,8 +34,8 @@ type Props = {
 };
 
 export function MainScreen({
-  selectedTtsPath,
-  onOpenFiles,
+  // selectedTtsPath,
+  // onOpenFiles,
   onCreateReminder,
   onEditReminder,
 }: Props) {
@@ -41,133 +44,258 @@ export function MainScreen({
   const scheme = useColorScheme();
   const colors = getColors(scheme);
 
-  const [state, setState] = useState('NOT CONNECTED');
+  const [snapshot, setSnapshot] = useState<SystemSnapshot>(
+    createInitialSystemSnapshot(),
+  );
   const [progress, setProgress] = useState(0);
-  const [deviceInfo, setDeviceInfo] = useState<BleDeviceInfo | null>(null);
-  const [sending, setSending] = useState(false);
 
-  const handleSyncWithEsp = async () => {
-    if (sending) return;
+  const globalState = computeGlobalSystemState(snapshot);
 
-    try {
-      setSending(true);
-      setProgress(0);
-      setState('SYNC START');
-
-      await syncWithEsp({
-        ble,
-        setProgress,
-        setState,
-      });
-
-      Alert.alert('Success', 'Synchronization completed successfully');
-    } catch (error) {
-      console.error('[SYNC][ERROR]', error);
-      setState('SYNC ERROR');
-      Alert.alert('Error', String(error));
-    } finally {
-      setSending(false);
-    }
+  const systemLabel: Record<typeof globalState, string> = {
+    offline: 'Offline',
+    booting: 'Démarrage...',
+    busy: 'En cours...',
+    ready: 'Prêt',
+    degraded: 'Problème détecté',
+    error: 'Erreur',
   };
 
-  const handleGenerateMemo = async () => {
-    try {
-      setState('GENERATING MEMO...');
-      setProgress(0);
+  /**
+   * Apply ESP runtime messages to the system snapshot.
+   */
+  const applyEspMessage = useCallback((msg: EspStatusMessage) => {
+    setSnapshot(prev => {
+      switch (msg.type) {
+        case 'state':
+          return {
+            ...prev,
+            espState: msg.state,
+            lastEspError:
+              msg.state === 'error' ? prev.lastEspError : null,
+            updatedAt: Date.now(),
+          };
 
-      const memoPath = await generateMemoFile();
+        case 'error':
+          return {
+            ...prev,
+            lastEspError: msg,
+            updatedAt: Date.now(),
+          };
 
-      const content = await RNFS.readFile(memoPath, 'utf8');
-      console.log('[MEMO GENERATED]', content);
+        case 'telemetry':
+          return {
+            ...prev,
+            telemetry: msg,
+            updatedAt: Date.now(),
+          };
 
-      setProgress(100);
-      setState('MEMO GENERATED');
-      
-      Alert.alert('Success', `Memo generated at:\n${memoPath}`);
-    } catch (error) {
-      console.error('[MEMO][ERROR]', error);
-      setState('MEMO ERROR');
-      Alert.alert('Error', String(error));
-    }
-  };
+        case 'progress':
+          return prev;
 
-  const handleRealBle = async () => {
-    setProgress(0);
-    setState('CONNECTING...');
-    setDeviceInfo(null);
+        default:
+          return prev;
+      }
+    });
+  }, []);
 
-    try {
-      const d = await ble.scanAndConnect();
-      if (!d) {
-        setState('DISCONNECTED');
+  /**
+   * Automatic BLE connection.
+   */
+  const connectBle = useCallback(
+    async (fromUser: boolean = false) => {
+      const bleState = ble.getBluetoothState();
+
+      if (
+        fromUser &&
+        bleState === 'PoweredOff'
+      ) {
+        Alert.alert(
+          'Bluetooth désactivé',
+          'Veuillez activer le Bluetooth dans les paramètres Android.',
+        );
         return;
       }
 
-      setProgress(100);
-      setState('CONNECTED 👍');
+      if (await ble.isDeviceConnected()) {
+        setSnapshot(s => ({
+          ...s,
+          ble: 'connected',
+          espState: 'ready',
+          lastEspError: null,
+          bleError: null,
+          updatedAt: Date.now(),
+        }));
+        return;
+      }
+
+      if (snapshot.ble === 'connecting') {
+        return;
+      }
+
+      setSnapshot(s => ({
+        ...s,
+        ble: 'connecting',
+        bleError: null,
+        updatedAt: Date.now(),
+      }));
 
       try {
-        const info = await ble.readDeviceInfo();
-        setDeviceInfo(info);
-      } catch (infoError) {
-        console.log('[BLE] readDeviceInfo error:', infoError);
-        setDeviceInfo(null);
+        const device = await ble.scanAndConnect();
+
+        if (!device) {
+          setSnapshot(s => ({
+            ...s,
+            ble: 'disconnected',
+            updatedAt: Date.now(),
+          }));
+          return;
+        }
+
+        setSnapshot(s => ({
+          ...s,
+          ble: 'connected',
+          espState: 'ready',
+          lastEspError: null,
+          bleError: null,
+          updatedAt: Date.now(),
+        }));
+      } catch (caught: unknown) {
+        const message =
+          caught instanceof Error ? caught.message : String(caught);
+
+        setSnapshot(s => ({
+          ...s,
+          ble: 'disconnected',
+          bleError: {
+            code: 'DISCONNECTED',
+            fatal: false,
+            message,
+          },
+          updatedAt: Date.now(),
+        }));
       }
-    } catch (error) {
-      console.log('[BLE] Connection error:', error);
-      setProgress(0);
-      setState('DISCONNECTED');
-      setDeviceInfo(null);
+  }, [snapshot.ble]);
+
+  /**
+   * Auto-connect BLE on mount and after disconnection
+   * (unless an error is already present).
+   */
+  useEffect(() => {
+    ble.onBleReady = () => connectBle(false);
+
+    if (snapshot.ble === 'disconnected' && !snapshot.bleError) {
+      connectBle(false);
     }
-  };
 
-  const handleSendBleFile = async () => {
-    if (sending) return;
+    return () => {
+      ble.onBleReady = undefined;
+    };
+  }, [snapshot.ble, snapshot.bleError, connectBle]);
 
-    if (!selectedTtsPath) {
-      Alert.alert('No file', 'No TTS file selected.');
+  const handleSyncWithEsp = async () => {
+    if (!(await ble.isDeviceConnected())) {
+      Alert.alert(
+        'MEMO non connecté',
+        'Veuillez connecter MEMO avant la synchronisation.',
+      );
       return;
     }
 
     try {
-      setSending(true);
-      await sendFileViaBle({
-        ble: ble,
-        filePath: selectedTtsPath,
+      setProgress(0);
+
+      await syncWithEsp({
+        ble,
         setProgress,
-        setState,
+        onEspMessage: applyEspMessage,
       });
-    } catch (e) {
-      console.error('[BLE FILE][ERROR]', e);
-      setState('ERROR');
-    } finally {
-      setSending(false);
+
+      Alert.alert('Success', 'Synchronization completed successfully');
+    } catch (error) {
+      Alert.alert('Error', String(error));
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      
-      {/* ===== HEADER SYSTEM ===== */}
+      {/* ===== HEADER ===== */}
       <View style={styles.header}>
         <Text style={[styles.title, { color: colors.text }]}>
           Talking Box - Prototype
         </Text>
 
-        <Text style={[styles.info, { color: colors.text }]}>
-          {state}
-        </Text>
+        {/* Global state badge */}
+        <View
+          style={[
+            styles.stateBadge,
+            { backgroundColor: getStateColor(globalState) },
+          ]}
+        >
+          <Text style={styles.stateBadgeText}>
+            {systemLabel[globalState]}
+          </Text>
+        </View>
 
-        {deviceInfo && (
-          <DeviceInfo info={deviceInfo} colors={colors} />
+        {/* Technical line */}
+        <View style={styles.techContainer}>
+          <View style={styles.techItem}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: getBleColor(snapshot.ble) },
+              ]}
+            />
+            <Text style={[styles.techLabel, { color: colors.text }]}>
+              BLUETOOTH
+            </Text>
+            <Text style={[styles.techValue, { color: colors.text }]}>
+              {snapshot.ble.toUpperCase()}
+            </Text>
+          </View>
+          
+          <View style={styles.techItem}>
+            <View
+              style={[
+                styles.statusDot,
+                { backgroundColor: getEspColor(snapshot.espState) },
+              ]}
+            />
+            <Text style={[styles.techLabel, { color: colors.text }]}>
+              MEMO
+            </Text>
+            <Text style={[styles.techValue, { color: colors.text }]}>
+              {(snapshot.espState ?? 'idle').toUpperCase()}
+            </Text>
+          </View>
+
+          {/* Error indicator */}
+          {(snapshot.lastEspError || snapshot.bleError) && (
+            <View style={styles.errorBadge}>
+              <Text style={styles.errorBadgeText}>
+                ERROR
+              </Text>
+            </View>
+          )}
+
+        </View>
+
+        {/* Activity indicator */}
+        {globalState === 'busy' && (
+          <View style={styles.headerProgress}>
+            <ProgressBar
+              progress={progress}
+              height={6}
+              backgroundColor={colors.inputBorder}
+              fillColor={colors.accent}
+            />
+          </View>
         )}
+
       </View>
 
       {/* ===== REMINDER LIST ===== */}
       <View style={styles.listContainer}>
-        <ReminderList
-          onSelect={onEditReminder}
-        />
+        <ReminderList onSelect={onEditReminder} />
       </View>
 
       {/* ===== FOOTER ===== */}
@@ -184,48 +312,6 @@ export function MainScreen({
           onPress={handleSyncWithEsp}
           color={colors.accent}
           textColor={colors.buttonText}
-        />
-      </View>
-
-      {/* ===== DEBUG PANEL ===== */}
-      <View style={styles.debug}>
-        <PrimaryButton
-          title="Connexion BLE"
-          onPress={handleRealBle}
-          color={colors.inputBorder}
-          textColor={colors.text}
-        />
-
-        <PrimaryButton
-        title="Générer les Mémos"
-        onPress={handleGenerateMemo}
-        color={colors.accent}
-        textColor={colors.buttonText}
-        />
-
-        <ProgressBar
-          progress={progress}
-          height={14}
-          backgroundColor={colors.inputBorder}
-          fillColor={colors.accent}
-        />
-
-        <Text style={[styles.info, { color: colors.text }]}>
-          {progress} %
-        </Text>
-
-        <PrimaryButton
-          title="Fichiers audio (TTS)"
-          onPress={onOpenFiles}
-          color={colors.inputBorder}
-          textColor={colors.text}
-        />
-
-        <PrimaryButton
-          title="Envoyer audio sélectionné"
-          onPress={handleSendBleFile}
-          color={colors.inputBorder}
-          textColor={colors.text}
         />
       </View>
     </View>
@@ -260,4 +346,79 @@ const styles = StyleSheet.create({
   debug: {
     paddingTop: 12,
   },
+  stateBadge: {
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginTop: 8,
+  },
+  stateBadgeText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  techLine: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: 8,
+  },
+  techText: {
+    fontSize: 13,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#E74C3C',
+  },
+  headerProgress: {
+    marginTop: 8,
+  },
+  techContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 10,
+    gap: 12,
+},
+
+techItem: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: 12,
+  paddingVertical: 6,
+  borderRadius: 16,
+  backgroundColor: 'rgba(0,0,0,0.05)',
+},
+
+statusDot: {
+  width: 8,
+  height: 8,
+  borderRadius: 4,
+  marginRight: 6,
+},
+
+techLabel: {
+  fontSize: 12,
+  fontWeight: '600',
+  marginRight: 4,
+},
+
+techValue: {
+  fontSize: 12,
+  fontWeight: '500',
+},
+
+errorBadge: {
+  paddingHorizontal: 10,
+  paddingVertical: 5,
+  borderRadius: 14,
+  backgroundColor: '#E74C3C',
+},
+
+errorBadgeText: {
+  color: '#FFFFFF',
+  fontSize: 11,
+  fontWeight: '700',
+},
 });
